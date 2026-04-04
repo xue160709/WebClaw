@@ -385,7 +385,9 @@ export default function OpenClawAssistant() {
   }, [restoreDialog, sendWithText]);
 
   useEffect(() => {
-    const icon = iconContainerRef.current?.querySelector('#openclaw-icon');
+    const icon = iconContainerRef.current?.querySelector<HTMLElement>(
+      '#openclaw-icon',
+    );
     if (!icon) return;
 
     const onMouseDown = (e: MouseEvent) => {
