@@ -1,1 +1,230 @@
-console.log('background script loaded');
+import { DEFAULT_PROMPTS, STORAGE, normalizeLocale, type PromptItem } from '@src/lib/openclaw/constants';
+import {
+  consumeChatCompletionStream,
+  prepareChatCompletionPost,
+  sendChatCompletion,
+} from '@src/lib/openclaw/gateway';
+import { tString, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
+
+const MENU_ROOT = 'openclaw-root';
+
+async function getMenuLocale(): Promise<OpenClawLocale> {
+  const r = await chrome.storage.local.get([STORAGE.LANGUAGE]);
+  return normalizeLocale(r[STORAGE.LANGUAGE] as string | undefined);
+}
+
+async function updateActionIcon(emoji: string | undefined) {
+  if (!emoji) return;
+  try {
+    const size = 32;
+    const canvas = new OffscreenCanvas(size, size);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, size, size);
+    ctx.font = `${size - 4}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, size / 2, size / 2 + 2);
+    const imageData = ctx.getImageData(0, 0, size, size);
+    await chrome.action.setIcon({ imageData });
+  } catch (e) {
+    console.error('Failed to update icon:', e);
+  }
+}
+
+async function updateContextMenu() {
+  const locale = await getMenuLocale();
+  const rootTitle = tString(locale, 'menuRootTitle');
+
+  const result = await chrome.storage.local.get([
+    STORAGE.PAGE_PROMPTS,
+    STORAGE.SELECTION_PROMPTS,
+    STORAGE.IMAGE_PROMPTS,
+  ]);
+
+  const pagePrompts =
+    (result[STORAGE.PAGE_PROMPTS] as PromptItem[]) || DEFAULT_PROMPTS.page;
+  const selectionPrompts =
+    (result[STORAGE.SELECTION_PROMPTS] as PromptItem[]) ||
+    DEFAULT_PROMPTS.selection;
+  const imagePrompts =
+    (result[STORAGE.IMAGE_PROMPTS] as PromptItem[]) || DEFAULT_PROMPTS.image;
+
+  await chrome.contextMenus.removeAll();
+
+  await chrome.contextMenus.create({
+    id: MENU_ROOT,
+    title: rootTitle,
+    contexts: ['page', 'selection', 'image'],
+  });
+
+  pagePrompts.forEach((item, index) => {
+    chrome.contextMenus.create({
+      parentId: MENU_ROOT,
+      id: `openclaw-page-${index}`,
+      title: item.label,
+      contexts: ['page'],
+    });
+  });
+
+  selectionPrompts.forEach((item, index) => {
+    chrome.contextMenus.create({
+      parentId: MENU_ROOT,
+      id: `openclaw-selection-${index}`,
+      title: item.label,
+      contexts: ['selection'],
+    });
+  });
+
+  imagePrompts.forEach((item, index) => {
+    chrome.contextMenus.create({
+      parentId: MENU_ROOT,
+      id: `openclaw-image-${index}`,
+      title: item.label,
+      contexts: ['image'],
+    });
+  });
+}
+
+chrome.runtime.onInstalled.addListener(async () => {
+  await updateContextMenu();
+  const r = await chrome.storage.local.get([STORAGE.CUSTOM_ICON]);
+  if (r[STORAGE.CUSTOM_ICON]) {
+    await updateActionIcon(r[STORAGE.CUSTOM_ICON] as string);
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  void updateContextMenu();
+  const iconChange = changes[STORAGE.CUSTOM_ICON];
+  if (iconChange) {
+    void updateActionIcon(iconChange.newValue as string | undefined);
+  }
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (!tab?.id) return;
+  const menuId = String(info.menuItemId);
+
+  void chrome.storage.local
+    .get([
+      STORAGE.PAGE_PROMPTS,
+      STORAGE.SELECTION_PROMPTS,
+      STORAGE.IMAGE_PROMPTS,
+    ])
+    .then((result) => {
+      const pagePrompts =
+        (result[STORAGE.PAGE_PROMPTS] as PromptItem[]) || DEFAULT_PROMPTS.page;
+      const selectionPrompts =
+        (result[STORAGE.SELECTION_PROMPTS] as PromptItem[]) ||
+        DEFAULT_PROMPTS.selection;
+      const imagePrompts =
+        (result[STORAGE.IMAGE_PROMPTS] as PromptItem[]) || DEFAULT_PROMPTS.image;
+
+      let promptTemplate = '';
+      let contextType: 'page' | 'selection' | 'image' | '' = '';
+      let imageUrl: string | null = null;
+
+      if (menuId.startsWith('openclaw-page-')) {
+        const index = parseInt(menuId.replace('openclaw-page-', ''), 10);
+        if (pagePrompts[index]) {
+          promptTemplate = pagePrompts[index].prompt;
+          contextType = 'page';
+        }
+      } else if (menuId.startsWith('openclaw-selection-')) {
+        const index = parseInt(menuId.replace('openclaw-selection-', ''), 10);
+        if (selectionPrompts[index]) {
+          promptTemplate = selectionPrompts[index].prompt;
+          contextType = 'selection';
+        }
+      } else if (menuId.startsWith('openclaw-image-')) {
+        const index = parseInt(menuId.replace('openclaw-image-', ''), 10);
+        if (imagePrompts[index]) {
+          promptTemplate = imagePrompts[index].prompt;
+          contextType = 'image';
+        }
+      }
+
+      if (!promptTemplate || !tab.id) return;
+
+      let finalPrompt = promptTemplate;
+      finalPrompt = finalPrompt.replace(/{url}/g, tab.url || '');
+
+      if (contextType === 'selection' && info.selectionText) {
+        finalPrompt = finalPrompt.replace(/{text}/g, info.selectionText);
+      }
+
+      if (contextType === 'image' && info.srcUrl) {
+        finalPrompt = finalPrompt.replace(/{imageUrl}/g, info.srcUrl);
+        imageUrl = info.srcUrl;
+      }
+
+      void chrome.tabs.sendMessage(tab.id!, {
+        action: 'injectText',
+        text: finalPrompt,
+        autoSend: true,
+        imageUrl,
+      });
+    });
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request?.action === 'openOptions') {
+    void chrome.runtime.openOptionsPage();
+    return;
+  }
+  if (request?.action === 'sendMessage') {
+    const text = String(request.text ?? '');
+    const tabId = sender.tab?.id;
+    const requestId =
+      typeof request.requestId === 'string' && request.requestId
+        ? request.requestId
+        : crypto.randomUUID();
+
+    void (async () => {
+      const prep = await prepareChatCompletionPost(text, true);
+      if (!prep.ok) {
+        sendResponse({ success: false, error: prep.error });
+        return;
+      }
+
+      if (tabId === undefined) {
+        try {
+          sendResponse(await sendChatCompletion(text));
+        } catch (error: unknown) {
+          console.error('API Error:', error);
+          sendResponse({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+        return;
+      }
+
+      sendResponse({ success: true, streaming: true, requestId });
+
+      const push = async (msg: object) => {
+        try {
+          await chrome.tabs.sendMessage(tabId, msg);
+        } catch {
+          /* tab closed or no content script */
+        }
+      };
+
+      try {
+        for await (const delta of consumeChatCompletionStream(prep)) {
+          await push({ action: 'streamDelta', requestId, delta });
+        }
+        await push({ action: 'streamComplete', requestId });
+      } catch (error: unknown) {
+        console.error('Stream API Error:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        await push({ action: 'streamError', requestId, error: message });
+      }
+    })();
+
+    return true;
+  }
+  return;
+});

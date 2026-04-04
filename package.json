@@ -1,7 +1,7 @@
 {
-  "name": "vite-web-extension",
-  "version": "1.4.0",
-  "description": "A simple chrome & firefox extension template with Vite, React, TypeScript and Tailwind CSS.",
+  "name": "openclaw-web-assistant",
+  "version": "0.26.0",
+  "description": "OpenClaw browser extension — Vite, React, TypeScript, Tailwind.",
   "license": "MIT",
   "repository": {
     "type": "git",
