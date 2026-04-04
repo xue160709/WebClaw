@@ -1,18 +1,21 @@
 {
   "manifest_version": 3,
   "name": "OpenClaw Web Assistant",
-  "description": "OpenClaw assistant while browsing — floating chat, quick prompts, and context menu actions. / 逛網頁時與 OpenClaw 代理溝通。",
-  "permissions": ["storage", "contextMenus", "activeTab"],
+  "description": "OpenClaw assistant while browsing — side panel chat, quick prompts, and context menu actions. / 逛網頁時於側邊欄與 OpenClaw 代理溝通。",
+  "permissions": ["storage", "contextMenus", "activeTab", "sidePanel", "scripting"],
   "host_permissions": ["<all_urls>"],
   "options_ui": {
     "page": "src/pages/options/index.html",
     "open_in_tab": true
   },
   "action": {
-    "default_popup": "src/pages/options/index.html",
+    "default_title": "OpenClaw Web Assistant",
     "default_icon": {
       "32": "icon-32.png"
     }
+  },
+  "side_panel": {
+    "default_path": "src/pages/panel/index.html"
   },
   "chrome_url_overrides": {
     "newtab": "src/pages/newtab/index.html"
@@ -20,12 +23,6 @@
   "icons": {
     "128": "icon-128.png"
   },
-  "content_scripts": [
-    {
-      "matches": ["http://*/*", "https://*/*", "<all_urls>"],
-      "js": ["src/pages/content/index.tsx"]
-    }
-  ],
   "devtools_page": "src/pages/devtools/index.html",
   "web_accessible_resources": [
     {

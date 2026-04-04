@@ -15,6 +15,8 @@ export const STORAGE = {
   LEGACY_PAGE: 'openclaw_page_prompt',
   LEGACY_SELECTION: 'openclaw_selection_prompt',
   LEGACY_IMAGE: 'openclaw_image_prompt',
+  /** Set by background when context menu opens the side panel before inject */
+  PENDING_PANEL_INJECT: 'openclaw_pending_panel_inject',
 } as const;
 
 export type PromptItem = { label: string; prompt: string };

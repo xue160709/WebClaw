@@ -1,12 +1,20 @@
-import { DEFAULT_PROMPTS, STORAGE, normalizeLocale, type PromptItem } from '@src/lib/openclaw/constants';
+import {
+  DEFAULT_PROMPTS,
+  STORAGE,
+  normalizeLocale,
+  type PromptItem,
+} from '@src/lib/openclaw/constants';
 import {
   consumeChatCompletionStream,
   prepareChatCompletionPost,
-  sendChatCompletion,
 } from '@src/lib/openclaw/gateway';
 import { tString, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
 
 const MENU_ROOT = 'openclaw-root';
+
+function supportsSidePanel(): boolean {
+  return typeof chrome.sidePanel?.setPanelBehavior === 'function';
+}
 
 async function getMenuLocale(): Promise<OpenClawLocale> {
   const r = await chrome.storage.local.get([STORAGE.LANGUAGE]);
@@ -86,12 +94,24 @@ async function updateContextMenu() {
   });
 }
 
+function initSidePanelClickOpensPanel() {
+  if (!supportsSidePanel()) return;
+  void chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((e) => console.error('sidePanel.setPanelBehavior:', e));
+}
+
 chrome.runtime.onInstalled.addListener(async () => {
+  initSidePanelClickOpensPanel();
   await updateContextMenu();
   const r = await chrome.storage.local.get([STORAGE.CUSTOM_ICON]);
   if (r[STORAGE.CUSTOM_ICON]) {
     await updateActionIcon(r[STORAGE.CUSTOM_ICON] as string);
   }
+});
+
+chrome.runtime.onStartup?.addListener(() => {
+  initSidePanelClickOpensPanel();
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -113,7 +133,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       STORAGE.SELECTION_PROMPTS,
       STORAGE.IMAGE_PROMPTS,
     ])
-    .then((result) => {
+    .then(async (result) => {
       const pagePrompts =
         (result[STORAGE.PAGE_PROMPTS] as PromptItem[]) || DEFAULT_PROMPTS.page;
       const selectionPrompts =
@@ -146,7 +166,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         }
       }
 
-      if (!promptTemplate || !tab.id) return;
+      if (!promptTemplate) return;
 
       let finalPrompt = promptTemplate;
       finalPrompt = finalPrompt.replace(/{url}/g, tab.url || '');
@@ -160,6 +180,23 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         imageUrl = info.srcUrl;
       }
 
+      if (supportsSidePanel() && tab.windowId !== undefined) {
+        await chrome.storage.local.set({
+          [STORAGE.PENDING_PANEL_INJECT]: {
+            text: finalPrompt,
+            autoSend: true,
+            imageUrl,
+            ts: Date.now(),
+          },
+        });
+        try {
+          await chrome.sidePanel.open({ windowId: tab.windowId });
+        } catch (e) {
+          console.error('sidePanel.open:', e);
+        }
+        return;
+      }
+
       void chrome.tabs.sendMessage(tab.id!, {
         action: 'injectText',
         text: finalPrompt,
@@ -169,6 +206,27 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     });
 });
 
+async function pushStreamEvent(
+  tabId: number | undefined,
+  msg: object,
+): Promise<void> {
+  if (supportsSidePanel()) {
+    try {
+      await chrome.runtime.sendMessage(msg);
+    } catch {
+      /* no extension page listening */
+    }
+    return;
+  }
+  if (tabId !== undefined) {
+    try {
+      await chrome.tabs.sendMessage(tabId, msg);
+    } catch {
+      /* tab closed or no content script */
+    }
+  }
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request?.action === 'openOptions') {
     void chrome.runtime.openOptionsPage();
@@ -176,11 +234,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   if (request?.action === 'sendMessage') {
     const text = String(request.text ?? '');
-    const tabId = sender.tab?.id;
-    const requestId =
-      typeof request.requestId === 'string' && request.requestId
-        ? request.requestId
-        : crypto.randomUUID();
+    const tabId =
+      typeof request.tabId === 'number' ? request.tabId : sender.tab?.id;
 
     void (async () => {
       const prep = await prepareChatCompletionPost(text, true);
@@ -189,38 +244,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return;
       }
 
-      if (tabId === undefined) {
-        try {
-          sendResponse(await sendChatCompletion(text));
-        } catch (error: unknown) {
-          console.error('API Error:', error);
-          sendResponse({
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          });
-        }
-        return;
-      }
+      const requestId =
+        typeof request.requestId === 'string' && request.requestId
+          ? request.requestId
+          : crypto.randomUUID();
 
       sendResponse({ success: true, streaming: true, requestId });
 
-      const push = async (msg: object) => {
-        try {
-          await chrome.tabs.sendMessage(tabId, msg);
-        } catch {
-          /* tab closed or no content script */
-        }
-      };
-
       try {
         for await (const delta of consumeChatCompletionStream(prep)) {
-          await push({ action: 'streamDelta', requestId, delta });
+          await pushStreamEvent(tabId, {
+            action: 'streamDelta',
+            requestId,
+            delta,
+          });
         }
-        await push({ action: 'streamComplete', requestId });
+        await pushStreamEvent(tabId, {
+          action: 'streamComplete',
+          requestId,
+        });
       } catch (error: unknown) {
         console.error('Stream API Error:', error);
         const message = error instanceof Error ? error.message : 'Unknown error';
-        await push({ action: 'streamError', requestId, error: message });
+        await pushStreamEvent(tabId, {
+          action: 'streamError',
+          requestId,
+          error: message,
+        });
       }
     })();
 
