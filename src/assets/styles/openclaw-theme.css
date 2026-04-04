@@ -1,0 +1,48 @@
+:root {
+  --oc-font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  --oc-text: #111827;
+  --oc-text-muted: #6b7280;
+  --oc-bg: #e8eaed;
+  --oc-canvas: #dfe3e8;
+  --oc-surface: #ffffff;
+  --oc-surface-soft: #f9fafb;
+  --oc-surface-strong: #f3f4f6;
+  --oc-border: #e5e7eb;
+  --oc-border-strong: #d1d5db;
+  --oc-primary: #f97316;
+  --oc-primary-strong: #ea580c;
+  --oc-primary-soft: #fff7ed;
+  --oc-primary-contrast: #ffffff;
+  --oc-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --oc-shadow-lg: 0 4px 20px rgba(15, 23, 42, 0.07);
+  --oc-radius-card: 20px;
+  --oc-radius-input: 16px;
+  --oc-radius-pill: 9999px;
+  --oc-code-bg: #2c241f;
+  --oc-code-text: #f4ede7;
+  --oc-success: #15803d;
+  --oc-danger: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --oc-text: #f3f4f6;
+    --oc-text-muted: #9ca3af;
+    --oc-bg: #1f2937;
+    --oc-canvas: #111827;
+    --oc-surface: #374151;
+    --oc-surface-soft: #4b5563;
+    --oc-surface-strong: #6b7280;
+    --oc-border: #4b5563;
+    --oc-border-strong: #6b7280;
+    --oc-primary: #fb923c;
+    --oc-primary-strong: #f97316;
+    --oc-primary-soft: rgba(251, 146, 60, 0.15);
+    --oc-primary-contrast: #111827;
+    --oc-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    --oc-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.35);
+    --oc-code-bg: #0f172a;
+    --oc-code-text: #e5e7eb;
+  }
+}

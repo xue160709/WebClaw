@@ -1,11 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  DEFAULT_FADE,
   DEFAULT_GATEWAY,
+  DEFAULT_ICON,
   DEFAULT_PROMPTS,
   STORAGE,
   normalizeLocale,
   type PromptItem,
 } from '@src/lib/openclaw/constants';
+import {
+  CloseIcon,
+  CollapseIcon,
+  ExpandIcon,
+  LinkIcon,
+  SendIcon,
+} from '@src/components/OpenClawIcons';
 import { tString, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
 import { parseOpenclawMarkdown } from '@src/lib/openclaw/markdown';
 
@@ -26,8 +35,7 @@ function getSafePosition(
 }
 
 export default function OpenClawAssistant() {
-  const [locale, setLocale] = useState<OpenClawLocale>('zh-TW');
-  const [iconEmoji, setIconEmoji] = useState('🦞');
+  const [locale, setLocale] = useState<OpenClawLocale>('zh-CN');
   const [iconStyle, setIconStyle] = useState<React.CSSProperties>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -43,9 +51,8 @@ export default function OpenClawAssistant() {
   const [isStreaming, setIsStreaming] = useState(false);
   const didInitWelcome = useRef(false);
 
-  const fadeSecRef = useRef(3);
+  const fadeSecRef = useRef(DEFAULT_FADE);
   const gatewayRef = useRef(DEFAULT_GATEWAY);
-  const lastImageRef = useRef<string | null>(null);
   const isDraggingRef = useRef(false);
   const dragStartTimeRef = useRef(0);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,28 +78,16 @@ export default function OpenClawAssistant() {
   const startFadeCountdown = useCallback(() => {
     clearFadeTimer();
     if (!dialogOpen || isFullScreen) return;
-    const ms = Math.max(1000, (fadeSecRef.current || 3) * 1000);
+    const ms = Math.max(1000, (fadeSecRef.current || DEFAULT_FADE) * 1000);
     fadeTimerRef.current = setTimeout(() => setIsFaded(true), ms);
   }, [clearFadeTimer, dialogOpen, isFullScreen]);
 
   const loadFromStorage = useCallback(() => {
     chrome.storage.local.get(
-      [
-        STORAGE.ICON_POS,
-        STORAGE.CUSTOM_ICON,
-        STORAGE.FADE_TIME,
-        STORAGE.LANGUAGE,
-        STORAGE.GATEWAY,
-      ],
+      [STORAGE.ICON_POS, STORAGE.LANGUAGE, STORAGE.GATEWAY],
       (result) => {
         if (result[STORAGE.GATEWAY]) {
           gatewayRef.current = result[STORAGE.GATEWAY] as string;
-        }
-        if (result[STORAGE.CUSTOM_ICON]) {
-          setIconEmoji(result[STORAGE.CUSTOM_ICON] as string);
-        }
-        if (result[STORAGE.FADE_TIME]) {
-          fadeSecRef.current = parseInt(String(result[STORAGE.FADE_TIME]), 10) || 3;
         }
         const loc = normalizeLocale(result[STORAGE.LANGUAGE] as string | undefined);
         setLocale(loc);
@@ -128,8 +123,6 @@ export default function OpenClawAssistant() {
       if (area !== 'local') return;
       if (
         changes[STORAGE.ICON_POS] ||
-        changes[STORAGE.CUSTOM_ICON] ||
-        changes[STORAGE.FADE_TIME] ||
         changes[STORAGE.LANGUAGE] ||
         changes[STORAGE.GATEWAY]
       ) {
@@ -268,11 +261,11 @@ export default function OpenClawAssistant() {
   }, [inputValue, isStreaming, sendWithText]);
 
   const processQuickAction = useCallback(
-    (template: string, extra: { text?: string; imageUrl?: string }) => {
+    (template: string, extra: { text?: string } = {}) => {
       let text = template;
       text = text.replace(/{url}/g, window.location.href);
       text = text.replace(/{text}/g, extra.text ?? '');
-      text = text.replace(/{imageUrl}/g, extra.imageUrl ?? '');
+      text = text.replace(/{imageUrl}/g, '');
       openDialog();
       sendWithText(text);
     },
@@ -329,7 +322,6 @@ export default function OpenClawAssistant() {
       action?: string;
       text?: string;
       autoSend?: boolean;
-      imageUrl?: string | null;
       requestId?: string;
       delta?: string;
       error?: string;
@@ -374,7 +366,6 @@ export default function OpenClawAssistant() {
         return;
       }
       if (request.action !== 'injectText') return;
-      if (request.imageUrl) lastImageRef.current = request.imageUrl;
       setDialogOpen(true);
       restoreDialog();
       setInputValue(request.text ?? '');
@@ -543,7 +534,9 @@ export default function OpenClawAssistant() {
         }}
       >
         <div className="openclaw-header">
-          <span>{t('assistantName')}</span>
+          <span className="openclaw-title">
+            {t('assistantName')}
+          </span>
           <div className="openclaw-controls">
             <button
               type="button"
@@ -551,7 +544,11 @@ export default function OpenClawAssistant() {
               title={t('fullScreen')}
               onClick={toggleFullScreen}
             >
-              {isFullScreen ? '↙️' : '⛶'}
+              {isFullScreen ? (
+                <CollapseIcon className="openclaw-icon-svg" />
+              ) : (
+                <ExpandIcon className="openclaw-icon-svg" />
+              )}
             </button>
             <button
               type="button"
@@ -559,7 +556,7 @@ export default function OpenClawAssistant() {
               title="OpenClaw Chat"
               onClick={openGatewayOrigin}
             >
-              🔗
+              <LinkIcon className="openclaw-icon-svg" />
             </button>
             <button
               type="button"
@@ -567,7 +564,7 @@ export default function OpenClawAssistant() {
               title={t('close')}
               onClick={closeDialog}
             >
-              ✕
+              <CloseIcon className="openclaw-icon-svg" />
             </button>
           </div>
         </div>
@@ -611,7 +608,7 @@ export default function OpenClawAssistant() {
             disabled={isStreaming}
             onClick={sendMessage}
           >
-            ➤
+            <SendIcon className="openclaw-send-icon" />
           </button>
         </div>
       </div>
@@ -650,10 +647,7 @@ export default function OpenClawAssistant() {
               onClick={(e) => {
                 e.stopPropagation();
                 const selection = window.getSelection()?.toString().trim() ?? '';
-                processQuickAction(p.prompt, {
-                  text: selection,
-                  imageUrl: lastImageRef.current ?? undefined,
-                });
+                processQuickAction(p.prompt, { text: selection });
                 setHoverOpen(false);
               }}
               onKeyDown={(e) => {
@@ -661,10 +655,7 @@ export default function OpenClawAssistant() {
                   e.preventDefault();
                   const selection =
                     window.getSelection()?.toString().trim() ?? '';
-                  processQuickAction(p.prompt, {
-                    text: selection,
-                    imageUrl: lastImageRef.current ?? undefined,
-                  });
+                  processQuickAction(p.prompt, { text: selection });
                   setHoverOpen(false);
                 }
               }}
@@ -674,7 +665,7 @@ export default function OpenClawAssistant() {
           ))}
         </div>
         <div id="openclaw-icon" title="OpenClaw Assistant">
-          {iconEmoji}
+          {DEFAULT_ICON}
         </div>
       </div>
     </div>

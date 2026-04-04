@@ -1,7 +1,7 @@
-/* Ported from OpenClaw-Chrome-Assistant/styles.css; fade class aligned with JS */
+@import '../../assets/styles/openclaw-theme.css';
+
 #openclaw-assistant-root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+  font-family: var(--oc-font-sans);
   z-index: 2147483647;
   position: absolute;
   top: 0;
@@ -15,43 +15,44 @@
   position: fixed;
   bottom: 20px;
   right: 20px;
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   pointer-events: auto;
   z-index: 2147483647;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.1s ease;
+  transition: transform 140ms ease;
 }
 
 #openclaw-icon-container.dragging {
   cursor: grabbing;
-  transform: scale(1.1);
+  transform: scale(1.06);
 }
 
 #openclaw-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: var(--oc-surface);
+  border: 1px solid var(--oc-border);
+  box-shadow: var(--oc-shadow-lg);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 27px;
   cursor: grab;
   user-select: none;
   transition:
-    opacity 0.3s ease,
-    transform 0.2s;
-  border: 1px solid #eee;
-  opacity: 0.3;
+    opacity 200ms ease,
+    transform 200ms ease,
+    box-shadow 200ms ease;
+  opacity: 0.78;
 }
 
 #openclaw-icon:hover {
   opacity: 1;
-  transform: scale(1.05);
+  transform: translateY(-2px);
 }
 
 #openclaw-hover-menu {
@@ -60,70 +61,82 @@
   transform: translateY(-50%);
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  background: white;
-  padding: 8px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border: 1px solid #eee;
-  min-width: 140px;
+  gap: 6px;
+  min-width: 180px;
+  padding: 10px;
   white-space: nowrap;
+  background: color-mix(in srgb, var(--oc-surface) 94%, transparent);
+  border: 1px solid var(--oc-border);
+  border-radius: 18px;
+  box-shadow: var(--oc-shadow);
+  backdrop-filter: blur(18px);
 }
 
 #openclaw-hover-menu.left {
-  right: 60px;
+  right: 70px;
   margin-right: 10px;
 }
 
 #openclaw-hover-menu.right {
-  left: 60px;
+  left: 70px;
   margin-left: 10px;
 }
 
 .openclaw-hover-title {
+  padding: 2px 4px 8px;
+  border-bottom: 1px solid var(--oc-border);
   font-size: 11px;
-  color: #888;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-bottom: 4px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #eee;
-  font-weight: bold;
   text-align: center;
+  color: var(--oc-text-muted);
 }
 
 .openclaw-hover-item {
-  padding: 6px 10px;
+  padding: 10px 12px;
   font-size: 13px;
-  color: #333;
+  color: var(--oc-text);
   cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.2s;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
-.openclaw-hover-item:hover {
-  background: #f0f0f0;
-  color: #000;
+.openclaw-hover-item:hover,
+.openclaw-hover-item:focus-visible {
+  background: var(--oc-primary-soft);
+  border-color: var(--oc-border-strong);
+  color: var(--oc-primary-strong);
+  outline: none;
 }
 
 #openclaw-dialog {
   position: fixed;
-  width: 320px;
-  height: 400px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  width: 360px;
+  height: 480px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   pointer-events: auto;
   z-index: 2147483646;
-  border: 1px solid #e0e0e0;
-  transition: opacity 0.5s ease;
+  background: color-mix(in srgb, var(--oc-surface) 96%, transparent);
+  border: 1px solid var(--oc-border);
+  border-radius: 24px;
+  box-shadow: var(--oc-shadow-lg);
+  backdrop-filter: blur(24px);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
   opacity: 1;
 }
 
 #openclaw-dialog.openclaw-faded {
-  opacity: 0.1;
+  opacity: 0.12;
   pointer-events: none;
 }
 
@@ -138,15 +151,30 @@
 }
 
 .openclaw-header {
-  padding: 12px 16px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #eee;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-weight: 600;
-  color: #333;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--oc-surface);
+  border-bottom: 1px solid var(--oc-border);
+  color: var(--oc-text);
   font-size: 14px;
+  font-weight: 600;
+}
+
+.openclaw-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.openclaw-title-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--oc-primary);
+  flex-shrink: 0;
 }
 
 .openclaw-controls {
@@ -155,180 +183,159 @@
 }
 
 .openclaw-btn-icon {
-  background: none;
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--oc-text-muted);
   cursor: pointer;
-  font-size: 14px;
-  padding: 4px;
-  color: #666;
-  border-radius: 4px;
-  transition: background 0.2s;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
-.openclaw-btn-icon:hover {
-  background: #e0e0e0;
-  color: #000;
+.openclaw-btn-icon:hover,
+.openclaw-btn-icon:focus-visible {
+  background: var(--oc-primary-soft);
+  border-color: var(--oc-border-strong);
+  color: var(--oc-primary-strong);
+  outline: none;
+}
+
+.openclaw-icon-svg,
+.openclaw-send-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .openclaw-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
-  background: #fff;
+  padding: 18px;
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
 .openclaw-message {
-  max-width: 85%;
-  padding: 10px 14px;
-  border-radius: 12px;
+  max-width: 88%;
+  padding: 12px 15px;
+  border-radius: 18px;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   word-wrap: break-word;
+  border: 1px solid var(--oc-border);
 }
 
 .openclaw-msg-assistant {
-  background: #f1f3f4;
-  color: #202124;
   align-self: flex-start;
-  border-bottom-left-radius: 4px;
+  background: var(--oc-surface-soft);
+  color: var(--oc-text);
+  border-bottom-left-radius: 8px;
 }
 
 .openclaw-msg-user {
-  background: #0b57d0;
-  color: white;
   align-self: flex-end;
-  border-bottom-right-radius: 4px;
+  background: var(--oc-primary);
+  color: var(--oc-primary-contrast);
+  border-color: transparent;
+  border-bottom-right-radius: 8px;
+  box-shadow: 0 10px 24px rgba(249, 115, 22, 0.22);
 }
 
 .openclaw-input-area {
-  padding: 12px;
-  border-top: 1px solid #eee;
-  background: #fff;
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  padding: 14px;
+  background: linear-gradient(180deg, transparent 0%, var(--oc-canvas) 100%);
+  border-top: 1px solid var(--oc-border);
 }
 
 #openclaw-input {
   flex: 1;
-  border: 1px solid #dadce0;
-  border-radius: 20px;
-  padding: 10px 14px;
+  min-height: 22px;
+  max-height: 140px;
+  padding: 12px 16px;
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-input);
+  background: var(--oc-surface);
+  color: var(--oc-text);
   font-size: 14px;
   outline: none;
   resize: none;
-  max-height: 120px;
-  min-height: 20px;
   font-family: inherit;
   overflow-y: auto;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 #openclaw-input:focus {
-  border-color: #0b57d0;
-  box-shadow: 0 0 0 1px #0b57d0;
+  border-color: var(--oc-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--oc-primary) 16%, transparent);
 }
 
 #openclaw-send-btn {
-  background: #0b57d0;
-  color: white;
-  border: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--oc-primary);
+  color: var(--oc-primary-contrast);
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  transition: background 0.2s;
   flex-shrink: 0;
+  box-shadow: var(--oc-shadow);
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease;
 }
 
-#openclaw-send-btn:hover {
-  background: #174ea6;
+#openclaw-send-btn:hover:not(:disabled) {
+  background: var(--oc-primary-strong);
+  transform: translateY(-1px);
 }
 
-@media (prefers-color-scheme: dark) {
-  #openclaw-dialog,
-  #openclaw-hover-menu,
-  .openclaw-messages,
-  .openclaw-header {
-    background-color: #202124 !important;
-    color: #e8eaed !important;
-    border-color: #3c4043 !important;
-  }
+#openclaw-send-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 
-  .openclaw-header {
-    background-color: #303134 !important;
-    border-bottom-color: #3c4043 !important;
-  }
+.openclaw-messages::-webkit-scrollbar,
+#openclaw-input::-webkit-scrollbar {
+  width: 8px;
+}
 
-  .openclaw-input-area {
-    background-color: #202124 !important;
-    border-top-color: #3c4043 !important;
-  }
-
-  #openclaw-input {
-    background-color: #303134 !important;
-    color: #e8eaed !important;
-    border-color: #5f6368 !important;
-  }
-
-  #openclaw-input:focus {
-    border-color: #8ab4f8 !important;
-    box-shadow: 0 0 0 1px #8ab4f8 !important;
-  }
-
-  .openclaw-msg-assistant {
-    background-color: #3c4043 !important;
-    color: #e8eaed !important;
-  }
-
-  .openclaw-msg-assistant code {
-    background: rgba(255, 255, 255, 0.1) !important;
-  }
-
-  .openclaw-btn-icon {
-    color: #9aa0a6 !important;
-  }
-
-  .openclaw-btn-icon:hover {
-    background-color: #3c4043 !important;
-    color: #e8eaed !important;
-  }
-
-  .openclaw-hover-item {
-    color: #e8eaed !important;
-  }
-
-  .openclaw-hover-item:hover {
-    background-color: #3c4043 !important;
-    color: #fff !important;
-  }
-
-  #openclaw-icon {
-    background-color: #303134 !important;
-    border-color: #5f6368 !important;
-  }
+.openclaw-messages::-webkit-scrollbar-thumb,
+#openclaw-input::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--oc-border-strong) 70%, transparent);
+  border-radius: 9999px;
 }
 
 .openclaw-msg-assistant code {
-  background: rgba(0, 0, 0, 0.05);
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-family: monospace;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .openclaw-msg-assistant pre {
-  background: #2d2d2d;
-  color: #ccc;
-  padding: 10px;
-  border-radius: 6px;
-  overflow-x: auto;
   margin: 8px 0;
+  padding: 12px;
+  background: var(--oc-code-bg);
+  color: var(--oc-code-text);
+  border-radius: 14px;
+  overflow-x: auto;
 }
 
 .openclaw-msg-assistant pre code {
@@ -338,7 +345,7 @@
 }
 
 .openclaw-msg-assistant a {
-  color: #0b57d0;
+  color: var(--oc-primary-strong);
   text-decoration: none;
 }
 

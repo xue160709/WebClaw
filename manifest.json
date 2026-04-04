@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OpenClaw Web Assistant",
-  "description": "OpenClaw assistant while browsing — side panel chat, quick prompts, and context menu actions. / 逛網頁時於側邊欄與 OpenClaw 代理溝通。",
+  "description": "OpenClaw assistant while browsing — side panel chat, quick prompts, and context menu actions. / 浏览网页时在侧栏与 OpenClaw 代理沟通。",
   "permissions": ["storage", "contextMenus", "activeTab", "sidePanel", "scripting"],
   "host_permissions": ["<all_urls>"],
   "options_ui": {
@@ -16,9 +16,6 @@
   },
   "side_panel": {
     "default_path": "src/pages/panel/index.html"
-  },
-  "chrome_url_overrides": {
-    "newtab": "src/pages/newtab/index.html"
   },
   "icons": {
     "128": "icon-128.png"

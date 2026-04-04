@@ -84,12 +84,8 @@ For Firefox
 ### Customization <a name="customization"></a>
 
 #### Adding / removing pages
-The template includes source code for **all** of the extension pages (i.e. New Tab, Dev Tools, Popup, Side Panel
-etc.). You will likely have to customize it to fit your needs.
-
-E.g. you don't want the newtab page to activate whenever you open a new tab:
-1. remove the directory `newtab` and its contents in `src/pages`
-2. remove `chrome_url_overrides: { newtab: 'src/pages/newtab/index.html' },` in `manifest.json`
+This project ships the extension pages you need (e.g. Dev Tools, Popup, Options, Side Panel). You can add or
+remove pages by adjusting `manifest.json` and the `src/pages/*` entries.
 
 Some pages like the "Side Panel" don't work the exact same in Chrome and Firefox. While this template includes
 the source code for the side panel, it won't automatically be included in the dist file to prevent cross browser

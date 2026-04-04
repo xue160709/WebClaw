@@ -1,11 +1,50 @@
+@import './openclaw-theme.css';
 @import "tailwindcss";
 
 @theme {
-    --animate-spin-slow: spin 20s linear infinite;
+  --font-sans: var(--oc-font-sans);
+  --color-openclaw-bg: var(--oc-bg);
+  --color-openclaw-canvas: var(--oc-canvas);
+  --color-openclaw-surface: var(--oc-surface);
+  --color-openclaw-soft: var(--oc-surface-soft);
+  --color-openclaw-text: var(--oc-text);
+  --color-openclaw-muted: var(--oc-text-muted);
+  --color-openclaw-border: var(--oc-border);
+  --color-openclaw-border-strong: var(--oc-border-strong);
+  --color-openclaw-primary: var(--oc-primary);
+  --color-openclaw-primary-strong: var(--oc-primary-strong);
+  --color-openclaw-primary-soft: var(--oc-primary-soft);
+  --shadow-openclaw: var(--oc-shadow);
+  --shadow-openclaw-lg: var(--oc-shadow-lg);
+  --radius-openclaw-card: var(--oc-radius-card);
+  --radius-openclaw-input: var(--oc-radius-input);
+  --radius-openclaw-pill: var(--oc-radius-pill);
+  --animate-spin-slow: spin 20s linear infinite;
 
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
-        }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
     }
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #__root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--oc-bg);
+    color: var(--oc-text);
+    font-family: var(--oc-font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
 }

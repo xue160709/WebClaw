@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  DEFAULT_FADE,
   DEFAULT_GATEWAY,
-  DEFAULT_ICON,
   DEFAULT_PROMPTS,
   DEFAULT_SESSION,
   STORAGE,
+  normalizeLocale,
   type PromptItem,
 } from '@src/lib/openclaw/constants';
 import { OPENCLAW_I18N, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
@@ -20,21 +19,26 @@ function migratePrompts(
   return fallback;
 }
 
+const sectionClass =
+  'rounded-openclaw-card border border-openclaw-border bg-openclaw-surface p-6 shadow-openclaw';
+const inputClass =
+  'w-full rounded-openclaw-input border border-openclaw-border bg-openclaw-soft px-4 py-3 text-sm text-openclaw-text outline-none transition focus:border-openclaw-primary focus:ring-4 focus:ring-openclaw-primary/15';
+const labelClass = 'mb-2 block text-sm font-medium text-openclaw-text';
+const pillButtonClass =
+  'inline-flex items-center justify-center rounded-openclaw-pill px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-4 focus:ring-openclaw-primary/20';
+const iconButtonClass =
+  'inline-flex h-9 items-center justify-center rounded-openclaw-pill border border-openclaw-border bg-openclaw-surface px-3 text-sm font-medium text-openclaw-text transition hover:border-openclaw-border-strong hover:bg-openclaw-soft focus:outline-none focus:ring-4 focus:ring-openclaw-primary/15';
+
 export default function Options() {
-  const [locale, setLocale] = useState<OpenClawLocale>('zh-TW');
+  const [locale, setLocale] = useState<OpenClawLocale>('zh-CN');
   const [gateway, setGateway] = useState(DEFAULT_GATEWAY);
   const [token, setToken] = useState('');
   const [sessionKey, setSessionKey] = useState(DEFAULT_SESSION);
-  const [customIcon, setCustomIcon] = useState(DEFAULT_ICON);
-  const [fadeTime, setFadeTime] = useState(String(DEFAULT_FADE));
   const [pagePrompts, setPagePrompts] = useState<PromptItem[]>(
     DEFAULT_PROMPTS.page,
   );
   const [selectionPrompts, setSelectionPrompts] = useState<PromptItem[]>(
     DEFAULT_PROMPTS.selection,
-  );
-  const [imagePrompts, setImagePrompts] = useState<PromptItem[]>(
-    DEFAULT_PROMPTS.image,
   );
   const [status, setStatus] = useState<{ text: string; error: boolean } | null>(
     null,
@@ -51,24 +55,17 @@ export default function Options() {
         STORAGE.GATEWAY,
         STORAGE.TOKEN,
         STORAGE.SESSION_KEY,
-        STORAGE.CUSTOM_ICON,
         STORAGE.LANGUAGE,
-        STORAGE.FADE_TIME,
         STORAGE.PAGE_PROMPTS,
         STORAGE.SELECTION_PROMPTS,
-        STORAGE.IMAGE_PROMPTS,
         STORAGE.LEGACY_PAGE,
         STORAGE.LEGACY_SELECTION,
-        STORAGE.LEGACY_IMAGE,
       ],
       (r) => {
         setGateway((r[STORAGE.GATEWAY] as string) || DEFAULT_GATEWAY);
         setToken((r[STORAGE.TOKEN] as string) || '');
         setSessionKey((r[STORAGE.SESSION_KEY] as string) || DEFAULT_SESSION);
-        setCustomIcon((r[STORAGE.CUSTOM_ICON] as string) || DEFAULT_ICON);
-        const lang = (r[STORAGE.LANGUAGE] as OpenClawLocale) || 'zh-TW';
-        setLocale(lang === 'en' ? 'en' : 'zh-TW');
-        setFadeTime(String(r[STORAGE.FADE_TIME] ?? DEFAULT_FADE));
+        setLocale(normalizeLocale(r[STORAGE.LANGUAGE] as string | undefined));
         setPagePrompts(
           migratePrompts(
             r[STORAGE.PAGE_PROMPTS] as PromptItem[],
@@ -81,13 +78,6 @@ export default function Options() {
             r[STORAGE.SELECTION_PROMPTS] as PromptItem[],
             r[STORAGE.LEGACY_SELECTION] as string,
             DEFAULT_PROMPTS.selection,
-          ),
-        );
-        setImagePrompts(
-          migratePrompts(
-            r[STORAGE.IMAGE_PROMPTS] as PromptItem[],
-            r[STORAGE.LEGACY_IMAGE] as string,
-            DEFAULT_PROMPTS.image,
           ),
         );
       },
@@ -109,16 +99,11 @@ export default function Options() {
       [STORAGE.GATEWAY]: gateway.trim(),
       [STORAGE.TOKEN]: tok,
       [STORAGE.SESSION_KEY]: sessionKey.trim(),
-      [STORAGE.CUSTOM_ICON]: customIcon.trim() || DEFAULT_ICON,
       [STORAGE.LANGUAGE]: locale,
-      [STORAGE.FADE_TIME]: parseInt(fadeTime, 10) || DEFAULT_FADE,
       [STORAGE.PAGE_PROMPTS]: pagePrompts.filter(
         (p) => p.label.trim() && p.prompt.trim(),
       ),
       [STORAGE.SELECTION_PROMPTS]: selectionPrompts.filter(
-        (p) => p.label.trim() && p.prompt.trim(),
-      ),
-      [STORAGE.IMAGE_PROMPTS]: imagePrompts.filter(
         (p) => p.label.trim() && p.prompt.trim(),
       ),
     };
@@ -152,155 +137,226 @@ export default function Options() {
     list: PromptItem[],
     setList: (p: PromptItem[]) => void,
   ) => (
-    <section className="mb-8">
-      <h3 className="mb-3 border-b border-zinc-200 pb-2 text-lg font-semibold text-zinc-800 dark:border-zinc-600 dark:text-zinc-100">
-        {title}
-      </h3>
-      <div className="space-y-3">
+    <section className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-openclaw-text">{title}</h3>
+          <p className="mt-1 text-sm text-openclaw-muted">
+            {t('quickOptionHelp')}
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`${pillButtonClass} bg-openclaw-primary px-4 text-white hover:bg-openclaw-primary-strong`}
+          onClick={() => setList([...list, { label: '', prompt: '' }])}
+        >
+          {t('addPrompt')}
+        </button>
+      </div>
+      <div className="space-y-4">
         {list.map((p, i) => (
           <div
             key={i}
-            className="flex gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-600 dark:bg-zinc-800/50"
+            className="rounded-openclaw-card border border-openclaw-border bg-openclaw-surface p-4 shadow-openclaw"
           >
-            <div className="min-w-0 flex-1 space-y-2">
-              <input
-                type="text"
-                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-500 dark:bg-zinc-900"
-                placeholder={t('promptLabel')}
-                value={p.label}
-                onChange={(e) =>
-                  updatePrompt(list, setList, i, 'label', e.target.value)
-                }
-              />
-              <textarea
-                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-500 dark:bg-zinc-900"
-                placeholder={t('promptContent')}
-                rows={2}
-                value={p.prompt}
-                onChange={(e) =>
-                  updatePrompt(list, setList, i, 'prompt', e.target.value)
-                }
-              />
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-openclaw-text">
+                  {title}
+                </div>
+                <div className="mt-1 text-xs text-openclaw-muted">
+                  {t('promptLabel')} #{i + 1}
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`${pillButtonClass} bg-red-50 px-3 text-red-600 hover:bg-red-100 focus:ring-red-200`}
+                onClick={() => removePrompt(list, setList, i)}
+              >
+                {t('removePrompt')}
+              </button>
             </div>
-            <button
-              type="button"
-              className="h-fit shrink-0 rounded bg-red-500 px-2 py-1 text-sm text-white hover:bg-red-600"
-              onClick={() => removePrompt(list, setList, i)}
-            >
-              {t('removePrompt')}
-            </button>
+            <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+              <div className="min-w-0">
+                <label className="mb-2 block text-xs font-medium uppercase tracking-[0.12em] text-openclaw-muted">
+                  {t('promptLabel')}
+                </label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  placeholder={t('promptLabel')}
+                  value={p.label}
+                  onChange={(e) =>
+                    updatePrompt(list, setList, i, 'label', e.target.value)
+                  }
+                />
+              </div>
+              <div className="min-w-0">
+                <label className="mb-2 block text-xs font-medium uppercase tracking-[0.12em] text-openclaw-muted">
+                  {t('promptContent')}
+                </label>
+                <textarea
+                  className={`${inputClass} min-h-28 resize-y`}
+                  placeholder={t('promptContent')}
+                  rows={4}
+                  value={p.prompt}
+                  onChange={(e) =>
+                    updatePrompt(list, setList, i, 'prompt', e.target.value)
+                  }
+                />
+              </div>
+            </div>
           </div>
         ))}
       </div>
-      <button
-        type="button"
-        className="mt-3 rounded bg-emerald-600 px-3 py-1.5 text-sm text-white hover:bg-emerald-700"
-        onClick={() => setList([...list, { label: '', prompt: '' }])}
-      >
-        {t('addPrompt')}
-      </button>
     </section>
   );
 
   return (
-    <div className="relative min-h-screen bg-zinc-100 px-4 py-8 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+    <div className="relative min-h-screen bg-openclaw-bg px-4 py-8 text-openclaw-text md:px-6">
       {status ? (
         <div
-          className={`fixed right-5 top-5 z-50 rounded px-4 py-2 text-white shadow ${
-            status.error ? 'bg-red-500' : 'bg-emerald-600'
+          className={`fixed right-5 top-5 z-50 rounded-openclaw-pill px-4 py-2 text-sm font-medium text-white shadow-openclaw ${
+            status.error ? 'bg-red-500' : 'bg-openclaw-primary'
           }`}
         >
           {status.text}
         </div>
       ) : null}
 
-      <div className="mx-auto max-w-3xl">
-        <h1 className="mb-8 text-2xl font-bold">{t('settingsTitle')}</h1>
+      <div className="mx-auto max-w-5xl space-y-6">
+        <section className={`${sectionClass} overflow-hidden`}>
+          <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <div className="max-w-2xl">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-openclaw-pill bg-openclaw-primary-soft px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-openclaw-primary-strong">
+                OpenClaw
+              </div>
+              <h1 className="text-3xl font-semibold tracking-tight text-openclaw-text">
+                {t('settingsTitle')}
+              </h1>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-openclaw-muted">
+                统一你的助手入口、快捷操作与对话体验。整体为灰底白卡片布局，主操作按钮使用橙色强调。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <div className="rounded-openclaw-pill border border-openclaw-border bg-openclaw-soft px-4 py-2 text-sm text-openclaw-muted">
+                Gateway / Token / Session
+              </div>
+              <div className="rounded-openclaw-pill border border-openclaw-border bg-openclaw-soft px-4 py-2 text-sm text-openclaw-muted">
+                Prompt presets
+              </div>
+            </div>
+          </div>
+        </section>
 
-        <section className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-          <h2 className="mb-4 text-lg font-semibold">{t('generalSettings')}</h2>
-          <label className="mb-1 block text-sm font-medium" htmlFor="gw">
-            {t('gatewayLabel')}
-          </label>
-          <input
-            id="gw"
-            type="text"
-            className="mb-4 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800"
-            value={gateway}
-            onChange={(e) => setGateway(e.target.value)}
-          />
-          <label className="mb-1 block text-sm font-medium" htmlFor="tok">
-            {t('tokenLabel')}
-          </label>
-          <input
-            id="tok"
-            type="text"
-            className="mb-4 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-          />
-          <label className="mb-1 block text-sm font-medium" htmlFor="sess">
-            {t('sessionKeyLabel')}
-          </label>
-          <input
-            id="sess"
-            type="text"
-            className="mb-4 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800"
-            value={sessionKey}
-            onChange={(e) => setSessionKey(e.target.value)}
-          />
-          <label className="mb-1 block text-sm font-medium" htmlFor="icon">
-            {t('iconLabel')}
-          </label>
-          <input
-            id="icon"
-            type="text"
-            className="mb-4 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800"
-            value={customIcon}
-            onChange={(e) => setCustomIcon(e.target.value)}
-          />
-          <label className="mb-1 block text-sm font-medium" htmlFor="lang">
-            {t('languageLabel')}
-          </label>
-          <select
-            id="lang"
-            className="mb-4 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800"
-            value={locale}
-            onChange={(e) => setLocale(e.target.value as OpenClawLocale)}
+        <section className={sectionClass}>
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-openclaw-text">
+                {t('generalSettings')}
+              </h2>
+              <p className="mt-1 text-sm text-openclaw-muted">
+                配置网关、身份信息与交互行为。
+              </p>
+            </div>
+            <button
+              type="button"
+              className={`${pillButtonClass} bg-openclaw-primary px-5 text-white hover:bg-openclaw-primary-strong`}
+              onClick={save}
+            >
+              {t('saveBtn')}
+            </button>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className={labelClass} htmlFor="gw">
+                {t('gatewayLabel')}
+              </label>
+              <input
+                id="gw"
+                type="text"
+                className={inputClass}
+                value={gateway}
+                onChange={(e) => setGateway(e.target.value)}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className={labelClass} htmlFor="tok">
+                {t('tokenLabel')}
+              </label>
+              <input
+                id="tok"
+                type="text"
+                className={inputClass}
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass} htmlFor="sess">
+                {t('sessionKeyLabel')}
+              </label>
+              <input
+                id="sess"
+                type="text"
+                className={inputClass}
+                value={sessionKey}
+                onChange={(e) => setSessionKey(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass} htmlFor="lang">
+                {t('languageLabel')}
+              </label>
+              <select
+                id="lang"
+                className={inputClass}
+                value={locale}
+                onChange={(e) => setLocale(e.target.value as OpenClawLocale)}
+              >
+                <option value="zh-CN">简体中文</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-openclaw-text">
+                {t('quickOptions')}
+              </h2>
+              <p className="mt-1 text-sm text-openclaw-muted">
+                通过预设 prompt 统一整页与框选两种工作流。
+              </p>
+            </div>
+            <div className={iconButtonClass}>Use variables: {'{url}'} {'{text}'}</div>
+          </div>
+
+          <div className="grid gap-6">
+            <div className={sectionClass}>
+              {promptBlock(t('modePage'), pagePrompts, setPagePrompts)}
+            </div>
+            <div className={sectionClass}>
+              {promptBlock(t('modeSelection'), selectionPrompts, setSelectionPrompts)}
+            </div>
+          </div>
+        </section>
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className={`${pillButtonClass} bg-openclaw-primary px-6 py-3 text-base text-white shadow-openclaw hover:bg-openclaw-primary-strong`}
+            onClick={save}
           >
-            <option value="zh-TW">繁體中文</option>
-            <option value="en">English</option>
-          </select>
-          <label className="mb-1 block text-sm font-medium" htmlFor="fade">
-            {t('fadeTimeLabel')}
-          </label>
-          <input
-            id="fade"
-            type="number"
-            min={1}
-            className="w-32 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800"
-            value={fadeTime}
-            onChange={(e) => setFadeTime(e.target.value)}
-          />
-        </section>
-
-        <section className="mb-6">
-          <h2 className="mb-1 text-xl font-semibold">{t('quickOptions')}</h2>
-          <p className="mb-6 text-sm text-zinc-500 dark:text-zinc-400">
-            {t('quickOptionHelp')}
-          </p>
-          {promptBlock(t('modePage'), pagePrompts, setPagePrompts)}
-          {promptBlock(t('modeSelection'), selectionPrompts, setSelectionPrompts)}
-          {promptBlock(t('modeImage'), imagePrompts, setImagePrompts)}
-        </section>
-
-        <button
-          type="button"
-          className="w-full rounded-lg bg-blue-600 py-3 text-lg font-medium text-white hover:bg-blue-700"
-          onClick={save}
-        >
-          {t('saveBtn')}
-        </button>
+            {t('saveBtn')}
+          </button>
+        </div>
       </div>
     </div>
   );

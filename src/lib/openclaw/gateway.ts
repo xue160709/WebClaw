@@ -38,7 +38,7 @@ export async function prepareChatCompletionPost(
   if (!token) {
     return {
       ok: false,
-      error: 'Token required (請先設定 Token)',
+      error: 'Token required（请先设置 Token）',
     };
   }
 

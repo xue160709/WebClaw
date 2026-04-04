@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  DEFAULT_FADE,
   DEFAULT_GATEWAY,
   DEFAULT_PROMPTS,
   STORAGE,
   normalizeLocale,
   type PromptItem,
 } from '@src/lib/openclaw/constants';
+import {
+  SendIcon,
+  SettingsIcon,
+} from '@src/components/OpenClawIcons';
 import { tString, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
 import { parseOpenclawMarkdown } from '@src/lib/openclaw/markdown';
 import '@pages/panel/openclaw-panel.css';
@@ -15,7 +20,6 @@ type Msg = { role: 'user' | 'assistant'; text: string; streamId?: string };
 type PendingInject = {
   text: string;
   autoSend?: boolean;
-  imageUrl?: string | null;
   ts?: number;
 };
 
@@ -44,13 +48,11 @@ function applyPendingInject(
   opts: {
     setInputValue: (v: string) => void;
     sendWithText: (t: string) => void;
-    lastImageRef: React.MutableRefObject<string | null>;
     restoreDialog: () => void;
     inputRef: React.RefObject<HTMLTextAreaElement | null>;
   },
 ) {
-  const { text, autoSend, imageUrl } = pending;
-  if (imageUrl) opts.lastImageRef.current = imageUrl;
+  const { text, autoSend } = pending;
   opts.restoreDialog();
   opts.setInputValue(text);
   queueMicrotask(() => {
@@ -66,8 +68,7 @@ function applyPendingInject(
 }
 
 export default function Panel() {
-  const [locale, setLocale] = useState<OpenClawLocale>('zh-TW');
-  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [locale, setLocale] = useState<OpenClawLocale>('zh-CN');
   const [isFaded, setIsFaded] = useState(false);
   const [pagePrompts, setPagePrompts] = useState<PromptItem[]>(
     DEFAULT_PROMPTS.page,
@@ -75,17 +76,13 @@ export default function Panel() {
   const [selectionPrompts, setSelectionPrompts] = useState<PromptItem[]>(
     DEFAULT_PROMPTS.selection,
   );
-  const [imagePrompts, setImagePrompts] = useState<PromptItem[]>(
-    DEFAULT_PROMPTS.image,
-  );
   const [messages, setMessages] = useState<Msg[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const didInitWelcome = useRef(false);
 
-  const fadeSecRef = useRef(3);
+  const fadeSecRef = useRef(DEFAULT_FADE);
   const gatewayRef = useRef(DEFAULT_GATEWAY);
-  const lastImageRef = useRef<string | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -106,52 +103,38 @@ export default function Panel() {
 
   const startFadeCountdown = useCallback(() => {
     clearFadeTimer();
-    if (isFullScreen) return;
-    const ms = Math.max(1000, (fadeSecRef.current || 3) * 1000);
+    const ms = Math.max(1000, (fadeSecRef.current || DEFAULT_FADE) * 1000);
     fadeTimerRef.current = setTimeout(() => setIsFaded(true), ms);
-  }, [clearFadeTimer, isFullScreen]);
+  }, [clearFadeTimer]);
 
   const loadPromptsFromStorage = useCallback(() => {
     chrome.storage.local.get(
-      [
-        STORAGE.PAGE_PROMPTS,
-        STORAGE.SELECTION_PROMPTS,
-        STORAGE.IMAGE_PROMPTS,
-      ],
+      [STORAGE.PAGE_PROMPTS, STORAGE.SELECTION_PROMPTS],
       (result) => {
         const p = result[STORAGE.PAGE_PROMPTS] as PromptItem[] | undefined;
         const s = result[STORAGE.SELECTION_PROMPTS] as PromptItem[] | undefined;
-        const i = result[STORAGE.IMAGE_PROMPTS] as PromptItem[] | undefined;
         if (p?.length) setPagePrompts(p);
         else setPagePrompts(DEFAULT_PROMPTS.page);
         if (s?.length) setSelectionPrompts(s);
         else setSelectionPrompts(DEFAULT_PROMPTS.selection);
-        if (i?.length) setImagePrompts(i);
-        else setImagePrompts(DEFAULT_PROMPTS.image);
       },
     );
   }, []);
 
   const loadFromStorage = useCallback(() => {
-    chrome.storage.local.get(
-      [STORAGE.CUSTOM_ICON, STORAGE.FADE_TIME, STORAGE.LANGUAGE, STORAGE.GATEWAY],
-      (result) => {
-        if (result[STORAGE.GATEWAY]) {
-          gatewayRef.current = result[STORAGE.GATEWAY] as string;
-        }
-        if (result[STORAGE.FADE_TIME]) {
-          fadeSecRef.current = parseInt(String(result[STORAGE.FADE_TIME]), 10) || 3;
-        }
-        const loc = normalizeLocale(result[STORAGE.LANGUAGE] as string | undefined);
-        setLocale(loc);
-        if (!didInitWelcome.current) {
-          didInitWelcome.current = true;
-          setMessages([
-            { role: 'assistant', text: tString(loc, 'defaultWelcome') },
-          ]);
-        }
-      },
-    );
+    chrome.storage.local.get([STORAGE.LANGUAGE, STORAGE.GATEWAY], (result) => {
+      if (result[STORAGE.GATEWAY]) {
+        gatewayRef.current = result[STORAGE.GATEWAY] as string;
+      }
+      const loc = normalizeLocale(result[STORAGE.LANGUAGE] as string | undefined);
+      setLocale(loc);
+      if (!didInitWelcome.current) {
+        didInitWelcome.current = true;
+        setMessages([
+          { role: 'assistant', text: tString(loc, 'defaultWelcome') },
+        ]);
+      }
+    });
     loadPromptsFromStorage();
   }, [loadPromptsFromStorage]);
 
@@ -163,12 +146,10 @@ export default function Panel() {
     ) => {
       if (area !== 'local') return;
       if (
-        changes[STORAGE.FADE_TIME] ||
         changes[STORAGE.LANGUAGE] ||
         changes[STORAGE.GATEWAY] ||
         changes[STORAGE.PAGE_PROMPTS] ||
-        changes[STORAGE.SELECTION_PROMPTS] ||
-        changes[STORAGE.IMAGE_PROMPTS]
+        changes[STORAGE.SELECTION_PROMPTS]
       ) {
         loadFromStorage();
       }
@@ -181,7 +162,6 @@ export default function Panel() {
             sendWithText: (text) => {
               void sendWithTextRef.current(text);
             },
-            lastImageRef,
             restoreDialog,
             inputRef,
           });
@@ -284,12 +264,12 @@ export default function Panel() {
   }, [inputValue, isStreaming, sendWithText]);
 
   const processQuickAction = useCallback(
-    async (template: string, extra: { text?: string; imageUrl?: string }) => {
+    async (template: string, extra: { text?: string } = {}) => {
       const tab = await getActiveTab();
       let text = template;
       text = text.replace(/{url}/g, tab?.url ?? '');
       text = text.replace(/{text}/g, extra.text ?? '');
-      text = text.replace(/{imageUrl}/g, extra.imageUrl ?? '');
+      text = text.replace(/{imageUrl}/g, '');
       restoreDialog();
       void sendWithText(text);
     },
@@ -305,7 +285,6 @@ export default function Panel() {
           sendWithText: (txt) => {
             void sendWithTextRef.current(txt);
           },
-          lastImageRef,
           restoreDialog,
           inputRef,
         });
@@ -319,7 +298,6 @@ export default function Panel() {
       action?: string;
       text?: string;
       autoSend?: boolean;
-      imageUrl?: string | null;
       requestId?: string;
       delta?: string;
       error?: string;
@@ -382,36 +360,12 @@ export default function Panel() {
     }
   };
 
-  const toggleFullScreen = () => {
-    setIsFullScreen((v) => !v);
-    restoreDialog();
-  };
-
-  const openGatewayOrigin = () => {
-    const g = gatewayRef.current;
-    try {
-      const url = new URL(g);
-      chrome.tabs.create({ url: url.origin });
-    } catch {
-      chrome.tabs.create({ url: g });
-    }
-  };
-
   const openSettings = () => {
     void chrome.runtime.sendMessage({ action: 'openOptions' });
   };
 
-  const closeSidePanel = () => {
-    void chrome.windows.getCurrent((w) => {
-      if (w.id !== undefined && chrome.sidePanel?.close) {
-        void chrome.sidePanel.close({ windowId: w.id });
-      }
-    });
-  };
-
   const chatClass = [
     'openclaw-panel-chat',
-    isFullScreen ? 'openclaw-fullscreen' : '',
     isFaded ? 'openclaw-faded' : '',
   ]
     .filter(Boolean)
@@ -435,7 +389,9 @@ export default function Panel() {
   return (
     <div className="openclaw-panel-root">
       <div className="openclaw-panel-header">
-        <span>{t('assistantName')}</span>
+        <span className="openclaw-title">
+          {t('assistantName')}
+        </span>
         <div className="openclaw-panel-controls">
           <button
             type="button"
@@ -443,31 +399,7 @@ export default function Panel() {
             title={t('settings')}
             onClick={openSettings}
           >
-            ⚙️
-          </button>
-          <button
-            type="button"
-            className="openclaw-btn-icon"
-            title={t('fullScreen')}
-            onClick={toggleFullScreen}
-          >
-            {isFullScreen ? '↙️' : '⛶'}
-          </button>
-          <button
-            type="button"
-            className="openclaw-btn-icon"
-            title="Gateway"
-            onClick={openGatewayOrigin}
-          >
-            🔗
-          </button>
-          <button
-            type="button"
-            className="openclaw-btn-icon"
-            title={t('close')}
-            onClick={closeSidePanel}
-          >
-            ✕
+            <SettingsIcon className="openclaw-icon-svg" />
           </button>
         </div>
       </div>
@@ -477,12 +409,7 @@ export default function Panel() {
           <div className="openclaw-panel-quick-title">{t('modePage')}</div>
           <div className="openclaw-panel-quick-btns">
             {pagePrompts.map((p) =>
-              quickBtn(p, () =>
-                void processQuickAction(p.prompt, {
-                  text: '',
-                  imageUrl: undefined,
-                }),
-              ),
+              quickBtn(p, () => void processQuickAction(p.prompt)),
             )}
           </div>
         </div>
@@ -492,23 +419,7 @@ export default function Panel() {
             {selectionPrompts.map((p) =>
               quickBtn(p, async () => {
                 const sel = (await getSelectionFromActiveTab()).trim();
-                void processQuickAction(p.prompt, {
-                  text: sel,
-                  imageUrl: lastImageRef.current ?? undefined,
-                });
-              }),
-            )}
-          </div>
-        </div>
-        <div className="openclaw-panel-quick-block">
-          <div className="openclaw-panel-quick-title">{t('modeImage')}</div>
-          <div className="openclaw-panel-quick-btns">
-            {imagePrompts.map((p) =>
-              quickBtn(p, async () => {
-                void processQuickAction(p.prompt, {
-                  text: '',
-                  imageUrl: lastImageRef.current ?? undefined,
-                });
+                void processQuickAction(p.prompt, { text: sel });
               }),
             )}
           </div>
@@ -563,7 +474,7 @@ export default function Panel() {
             disabled={isStreaming}
             onClick={() => void sendMessage()}
           >
-            ➤
+            <SendIcon className="openclaw-send-icon" />
           </button>
         </div>
       </div>
