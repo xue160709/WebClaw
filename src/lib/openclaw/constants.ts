@@ -20,7 +20,6 @@ export type PromptItem = { label: string; prompt: string };
 export const DEFAULT_GATEWAY = 'http://localhost:18789';
 export const DEFAULT_SESSION = 'agent:main:main';
 export const DEFAULT_ICON = '🦞';
-export const DEFAULT_FADE = 3;
 
 export const DEFAULT_PROMPTS: {
   page: PromptItem[];

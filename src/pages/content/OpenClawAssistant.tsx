@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  DEFAULT_FADE,
   DEFAULT_GATEWAY,
   DEFAULT_ICON,
   DEFAULT_PROMPTS,
@@ -39,7 +38,6 @@ export default function OpenClawAssistant() {
   const [iconStyle, setIconStyle] = useState<React.CSSProperties>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [isFaded, setIsFaded] = useState(false);
   const [dialogPos, setDialogPos] = useState<React.CSSProperties>({});
   const [hoverOpen, setHoverOpen] = useState(false);
   const [hoverSide, setHoverSide] = useState<'left' | 'right'>('right');
@@ -51,36 +49,15 @@ export default function OpenClawAssistant() {
   const [isStreaming, setIsStreaming] = useState(false);
   const didInitWelcome = useRef(false);
 
-  const fadeSecRef = useRef(DEFAULT_FADE);
   const gatewayRef = useRef(DEFAULT_GATEWAY);
   const isDraggingRef = useRef(false);
   const dragStartTimeRef = useRef(0);
-  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iconContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const t = useCallback((key: string) => tString(locale, key), [locale]);
-
-  const clearFadeTimer = useCallback(() => {
-    if (fadeTimerRef.current) {
-      clearTimeout(fadeTimerRef.current);
-      fadeTimerRef.current = null;
-    }
-  }, []);
-
-  const restoreDialog = useCallback(() => {
-    clearFadeTimer();
-    setIsFaded(false);
-  }, [clearFadeTimer]);
-
-  const startFadeCountdown = useCallback(() => {
-    clearFadeTimer();
-    if (!dialogOpen || isFullScreen) return;
-    const ms = Math.max(1000, (fadeSecRef.current || DEFAULT_FADE) * 1000);
-    fadeTimerRef.current = setTimeout(() => setIsFaded(true), ms);
-  }, [clearFadeTimer, dialogOpen, isFullScreen]);
 
   const loadFromStorage = useCallback(() => {
     chrome.storage.local.get(
@@ -176,14 +153,12 @@ export default function OpenClawAssistant() {
     setHoverOpen(false);
     positionDialog();
     setDialogOpen(true);
-    restoreDialog();
     queueMicrotask(() => inputRef.current?.focus());
-  }, [positionDialog, restoreDialog]);
+  }, [positionDialog]);
 
   const closeDialog = useCallback(() => {
     setDialogOpen(false);
-    clearFadeTimer();
-  }, [clearFadeTimer]);
+  }, []);
 
   const toggleDialog = useCallback(() => {
     if (dialogOpen) closeDialog();
@@ -202,7 +177,6 @@ export default function OpenClawAssistant() {
         { role: 'assistant', text: '', streamId: requestId },
       ]);
       setInputValue('');
-      restoreDialog();
       setIsStreaming(true);
 
       chrome.runtime.sendMessage(
@@ -252,7 +226,7 @@ export default function OpenClawAssistant() {
         },
       );
     },
-    [isStreaming, restoreDialog],
+    [isStreaming],
   );
 
   const sendMessage = useCallback(() => {
@@ -292,7 +266,6 @@ export default function OpenClawAssistant() {
 
   const onIconMouseEnter = useCallback(() => {
     if (isDraggingRef.current) return;
-    restoreDialog();
     if (hoverHideTimerRef.current) {
       clearTimeout(hoverHideTimerRef.current);
       hoverHideTimerRef.current = null;
@@ -310,7 +283,7 @@ export default function OpenClawAssistant() {
       setHoverMenuStyle({ left: '100%', right: 'auto' });
     }
     setHoverOpen(true);
-  }, [dialogOpen, refreshHoverMenu, restoreDialog]);
+  }, [dialogOpen, refreshHoverMenu]);
 
   const scheduleHoverHide = useCallback(() => {
     if (hoverHideTimerRef.current) clearTimeout(hoverHideTimerRef.current);
@@ -367,7 +340,6 @@ export default function OpenClawAssistant() {
       }
       if (request.action !== 'injectText') return;
       setDialogOpen(true);
-      restoreDialog();
       setInputValue(request.text ?? '');
       queueMicrotask(() => {
         const el = inputRef.current;
@@ -382,7 +354,7 @@ export default function OpenClawAssistant() {
     };
     chrome.runtime.onMessage.addListener(onMsg);
     return () => chrome.runtime.onMessage.removeListener(onMsg);
-  }, [restoreDialog, sendWithText]);
+  }, [sendWithText]);
 
   useEffect(() => {
     const icon = iconContainerRef.current?.querySelector<HTMLElement>(
@@ -455,7 +427,6 @@ export default function OpenClawAssistant() {
       if (isDraggingRef.current) return;
       if (Date.now() - dragStartTimeRef.current < 200) {
         toggleDialog();
-        restoreDialog();
       }
     };
 
@@ -465,7 +436,7 @@ export default function OpenClawAssistant() {
       icon.removeEventListener('mousedown', onMouseDown);
       icon.removeEventListener('click', onClick);
     };
-  }, [restoreDialog, toggleDialog]);
+  }, [toggleDialog]);
 
   const onInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputValue(e.target.value);
@@ -491,7 +462,6 @@ export default function OpenClawAssistant() {
       return;
     }
     setIsFullScreen(true);
-    restoreDialog();
   };
 
   const openGatewayOrigin = () => {
@@ -504,10 +474,7 @@ export default function OpenClawAssistant() {
     }
   };
 
-  const dialogClass = [
-    isFullScreen ? 'openclaw-fullscreen' : '',
-    isFaded ? 'openclaw-faded' : '',
-  ]
+  const dialogClass = [isFullScreen ? 'openclaw-fullscreen' : '']
     .filter(Boolean)
     .join(' ');
 
@@ -528,11 +495,6 @@ export default function OpenClawAssistant() {
                 height: '100vh',
               }
             : dialogPos),
-        }}
-        onMouseEnter={restoreDialog}
-        onMouseLeave={() => {
-          if (document.activeElement === inputRef.current) return;
-          startFadeCountdown();
         }}
       >
         <div className="openclaw-header">
@@ -598,11 +560,6 @@ export default function OpenClawAssistant() {
             disabled={isStreaming}
             onChange={onInput}
             onKeyDown={onKeyDown}
-            onFocus={restoreDialog}
-            onBlur={() => {
-              const dialog = document.getElementById('openclaw-dialog');
-              if (dialog && !dialog.matches(':hover')) startFadeCountdown();
-            }}
           />
           <button
             type="button"

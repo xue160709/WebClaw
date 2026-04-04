@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  DEFAULT_FADE,
   DEFAULT_GATEWAY,
   DEFAULT_PROMPTS,
   STORAGE,
@@ -48,12 +47,10 @@ function applyPendingInject(
   opts: {
     setInputValue: (v: string) => void;
     sendWithText: (t: string) => void;
-    restoreDialog: () => void;
     inputRef: React.RefObject<HTMLTextAreaElement | null>;
   },
 ) {
   const { text, autoSend } = pending;
-  opts.restoreDialog();
   opts.setInputValue(text);
   queueMicrotask(() => {
     const el = opts.inputRef.current;
@@ -69,7 +66,6 @@ function applyPendingInject(
 
 export default function Panel() {
   const [locale, setLocale] = useState<OpenClawLocale>('zh-CN');
-  const [isFaded, setIsFaded] = useState(false);
   const [pagePrompts, setPagePrompts] = useState<PromptItem[]>(
     DEFAULT_PROMPTS.page,
   );
@@ -81,31 +77,11 @@ export default function Panel() {
   const [isStreaming, setIsStreaming] = useState(false);
   const didInitWelcome = useRef(false);
 
-  const fadeSecRef = useRef(DEFAULT_FADE);
   const gatewayRef = useRef(DEFAULT_GATEWAY);
-  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const t = useCallback((key: string) => tString(locale, key), [locale]);
-
-  const clearFadeTimer = useCallback(() => {
-    if (fadeTimerRef.current) {
-      clearTimeout(fadeTimerRef.current);
-      fadeTimerRef.current = null;
-    }
-  }, []);
-
-  const restoreDialog = useCallback(() => {
-    clearFadeTimer();
-    setIsFaded(false);
-  }, [clearFadeTimer]);
-
-  const startFadeCountdown = useCallback(() => {
-    clearFadeTimer();
-    const ms = Math.max(1000, (fadeSecRef.current || DEFAULT_FADE) * 1000);
-    fadeTimerRef.current = setTimeout(() => setIsFaded(true), ms);
-  }, [clearFadeTimer]);
 
   const loadPromptsFromStorage = useCallback(() => {
     chrome.storage.local.get(
@@ -162,7 +138,6 @@ export default function Panel() {
             sendWithText: (text) => {
               void sendWithTextRef.current(text);
             },
-            restoreDialog,
             inputRef,
           });
           void chrome.storage.local.remove(STORAGE.PENDING_PANEL_INJECT);
@@ -171,7 +146,7 @@ export default function Panel() {
     };
     chrome.storage.onChanged.addListener(onStorage);
     return () => chrome.storage.onChanged.removeListener(onStorage);
-  }, [loadFromStorage, restoreDialog]);
+  }, [loadFromStorage]);
 
   const sendWithTextRef = useRef<(raw: string) => void>((_raw) => {});
 
@@ -202,7 +177,6 @@ export default function Panel() {
         { role: 'assistant', text: '', streamId: requestId },
       ]);
       setInputValue('');
-      restoreDialog();
       setIsStreaming(true);
 
       chrome.runtime.sendMessage(
@@ -253,7 +227,7 @@ export default function Panel() {
         },
       );
     },
-    [isStreaming, restoreDialog],
+    [isStreaming],
   );
 
   sendWithTextRef.current = sendWithText;
@@ -270,10 +244,9 @@ export default function Panel() {
       text = text.replace(/{url}/g, tab?.url ?? '');
       text = text.replace(/{text}/g, extra.text ?? '');
       text = text.replace(/{imageUrl}/g, '');
-      restoreDialog();
       void sendWithText(text);
     },
-    [restoreDialog, sendWithText],
+    [sendWithText],
   );
 
   useEffect(() => {
@@ -285,13 +258,12 @@ export default function Panel() {
           sendWithText: (txt) => {
             void sendWithTextRef.current(txt);
           },
-          restoreDialog,
           inputRef,
         });
         void chrome.storage.local.remove(STORAGE.PENDING_PANEL_INJECT);
       }
     });
-  }, [restoreDialog]);
+  }, []);
 
   useEffect(() => {
     const onMsg = (request: {
@@ -364,13 +336,6 @@ export default function Panel() {
     void chrome.runtime.sendMessage({ action: 'openOptions' });
   };
 
-  const chatClass = [
-    'openclaw-panel-chat',
-    isFaded ? 'openclaw-faded' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
   const quickBtn = (p: PromptItem, run: () => void) => (
     <button
       key={p.label + p.prompt.slice(0, 12)}
@@ -378,7 +343,6 @@ export default function Panel() {
       className="openclaw-panel-quick-btn"
       title={p.prompt}
       onClick={() => {
-        restoreDialog();
         void run();
       }}
     >
@@ -426,14 +390,7 @@ export default function Panel() {
         </div>
       </div>
 
-      <div
-        className={chatClass}
-        onMouseEnter={restoreDialog}
-        onMouseLeave={() => {
-          if (document.activeElement === inputRef.current) return;
-          startFadeCountdown();
-        }}
-      >
+      <div className="openclaw-panel-chat">
         <div className="openclaw-messages">
           {messages.map((m, i) =>
             m.role === 'assistant' ? (
@@ -462,11 +419,6 @@ export default function Panel() {
             disabled={isStreaming}
             onChange={onInput}
             onKeyDown={onKeyDown}
-            onFocus={restoreDialog}
-            onBlur={() => {
-              const root = document.querySelector('.openclaw-panel-chat');
-              if (root && !root.matches(':hover')) startFadeCountdown();
-            }}
           />
           <button
             type="button"
