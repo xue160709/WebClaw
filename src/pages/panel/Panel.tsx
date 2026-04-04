@@ -7,6 +7,7 @@ import {
   type PromptItem,
 } from '@src/lib/openclaw/constants';
 import {
+  ClearChatIcon,
   SendIcon,
   SettingsIcon,
 } from '@src/components/OpenClawIcons';
@@ -23,6 +24,15 @@ import {
   type SelectionSyncMessage,
 } from '@src/lib/openclaw/pageContextMessages';
 import { parseOpenclawMarkdown } from '@src/lib/openclaw/markdown';
+import {
+  buildPanelSessionKey,
+  deletePanelChatRecord,
+  getPanelChatRecord,
+  newPanelThreadId,
+  normalizePageUrlForChat,
+  panelMessagesToStored,
+  putPanelChatRecord,
+} from '@src/lib/openclaw/panelChatStore';
 import '@pages/panel/openclaw-panel.css';
 
 type Msg = { role: 'user' | 'assistant'; text: string; streamId?: string };
@@ -86,7 +96,7 @@ export default function Panel() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const didInitWelcome = useRef(false);
+  const [panelChatReady, setPanelChatReady] = useState(false);
 
   const [pageContext, setPageContext] = useState<{
     title: string;
@@ -102,14 +112,46 @@ export default function Panel() {
 
   const gatewayRef = useRef(DEFAULT_GATEWAY);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const windowIdRef = useRef<number | null>(null);
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+  const [layoutOffsets, setLayoutOffsets] = useState({
+    headerHeight: 0,
+    composerHeight: 0,
+  });
+
+  const urlKeyRef = useRef(normalizePageUrlForChat(''));
+  urlKeyRef.current = normalizePageUrlForChat(pageContext.url);
+
+  const urlLoadGenRef = useRef(0);
+  const panelChatSessionRef = useRef({ threadId: '', sessionKey: '' });
+  const streamUrlKeyRef = useRef('');
+  const streamPersistRef = useRef({
+    urlKey: '',
+    threadId: '',
+    sessionKey: '',
+  });
 
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
 
   const t = useCallback((key: string) => tString(locale, key), [locale]);
+
+  const persistPanelSnapshotForStream = useCallback((msgs: Msg[]) => {
+    const { urlKey, threadId, sessionKey } = streamPersistRef.current;
+    if (!urlKey || !threadId || !sessionKey) return;
+    void putPanelChatRecord({
+      urlKey,
+      threadId,
+      sessionKey,
+      messages: panelMessagesToStored(msgs),
+      updatedAt: Date.now(),
+    });
+  }, []);
 
   const loadPromptsFromStorage = useCallback(() => {
     chrome.storage.local.get(
@@ -132,15 +174,71 @@ export default function Panel() {
       }
       const loc = normalizeLocale(result[STORAGE.LANGUAGE] as string | undefined);
       setLocale(loc);
-      if (!didInitWelcome.current) {
-        didInitWelcome.current = true;
-        setMessages([
-          { role: 'assistant', text: tString(loc, 'defaultWelcome') },
-        ]);
-      }
     });
     loadPromptsFromStorage();
   }, [loadPromptsFromStorage]);
+
+  useEffect(() => {
+    const urlKey = normalizePageUrlForChat(pageContext.url);
+    const gen = ++urlLoadGenRef.current;
+    setPanelChatReady(false);
+    setIsStreaming(false);
+    void (async () => {
+      try {
+        const rec = await getPanelChatRecord(urlKey);
+        if (gen !== urlLoadGenRef.current) return;
+        const welcomeText = tString(localeRef.current, 'defaultWelcome');
+        if (rec) {
+          const sessionKey = await buildPanelSessionKey(urlKey, rec.threadId);
+          panelChatSessionRef.current = { threadId: rec.threadId, sessionKey };
+          setMessages(rec.messages as Msg[]);
+          if (rec.sessionKey !== sessionKey) {
+            await putPanelChatRecord({
+              ...rec,
+              sessionKey,
+              updatedAt: Date.now(),
+            });
+          }
+        } else {
+          const threadId = newPanelThreadId();
+          const sessionKey = await buildPanelSessionKey(urlKey, threadId);
+          panelChatSessionRef.current = { threadId, sessionKey };
+          const welcome: Msg[] = [{ role: 'assistant', text: welcomeText }];
+          setMessages(welcome);
+          await putPanelChatRecord({
+            urlKey,
+            threadId,
+            sessionKey,
+            messages: panelMessagesToStored(welcome),
+            updatedAt: Date.now(),
+          });
+        }
+        if (gen === urlLoadGenRef.current) setPanelChatReady(true);
+      } catch (e) {
+        console.error('OpenClaw panel chat load failed:', e);
+        if (gen !== urlLoadGenRef.current) return;
+        const welcomeText = tString(localeRef.current, 'defaultWelcome');
+        try {
+          const threadId = newPanelThreadId();
+          const sessionKey = await buildPanelSessionKey(urlKey, threadId);
+          panelChatSessionRef.current = { threadId, sessionKey };
+          const welcome: Msg[] = [{ role: 'assistant', text: welcomeText }];
+          setMessages(welcome);
+          await putPanelChatRecord({
+            urlKey,
+            threadId,
+            sessionKey,
+            messages: panelMessagesToStored(welcome),
+            updatedAt: Date.now(),
+          });
+        } catch {
+          panelChatSessionRef.current = { threadId: '', sessionKey: '' };
+          setMessages([{ role: 'assistant', text: welcomeText }]);
+        }
+        if (gen === urlLoadGenRef.current) setPanelChatReady(true);
+      }
+    })();
+  }, [pageContext.url]);
 
   useEffect(() => {
     chrome.windows.getCurrent((w) => {
@@ -252,26 +350,114 @@ export default function Panel() {
   const sendWithTextRef = useRef<(raw: string) => void>((_raw) => {});
 
   useEffect(() => {
+    if (!panelChatReady) return;
+    const knownWelcomes = new Set(
+      (['en', 'zh-CN'] as const).map((l) => tString(l, 'defaultWelcome')),
+    );
     setMessages((prev) => {
-      if (prev.length === 1 && prev[0].role === 'assistant') {
-        return [{ role: 'assistant', text: tString(locale, 'defaultWelcome') }];
+      if (prev.length === 1 && prev[0].role === 'assistant' && !prev[0].streamId) {
+        if (!knownWelcomes.has(prev[0].text)) return prev;
+        const w = tString(locale, 'defaultWelcome');
+        if (prev[0].text === w) return prev;
+        const next: Msg[] = [{ role: 'assistant', text: w }];
+        queueMicrotask(() => {
+          const urlKey = urlKeyRef.current;
+          const { threadId, sessionKey } = panelChatSessionRef.current;
+          if (!threadId || !sessionKey) return;
+          void putPanelChatRecord({
+            urlKey,
+            threadId,
+            sessionKey,
+            messages: panelMessagesToStored(next),
+            updatedAt: Date.now(),
+          });
+        });
+        return next;
       }
       return prev;
     });
-  }, [locale]);
+  }, [locale, panelChatReady]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
 
+  useEffect(() => {
+    const headerEl = headerRef.current;
+    const composerEl = composerRef.current;
+    if (!headerEl && !composerEl) return;
+
+    const updateLayoutOffsets = () => {
+      const next = {
+        headerHeight: headerEl?.offsetHeight ?? 0,
+        composerHeight: composerEl?.offsetHeight ?? 0,
+      };
+      setLayoutOffsets((prev) =>
+        prev.headerHeight === next.headerHeight &&
+        prev.composerHeight === next.composerHeight
+          ? prev
+          : next,
+      );
+    };
+
+    updateLayoutOffsets();
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(updateLayoutOffsets);
+    if (headerEl) observer?.observe(headerEl);
+    if (composerEl) observer?.observe(composerEl);
+    window.addEventListener('resize', updateLayoutOffsets);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updateLayoutOffsets);
+    };
+  }, []);
+
+  const clearChatHistory = useCallback(async () => {
+    if (isStreaming || !panelChatReady) return;
+    const urlKey = urlKeyRef.current;
+    try {
+      await deletePanelChatRecord(urlKey);
+    } catch (e) {
+      console.error('OpenClaw panel chat delete failed:', e);
+    }
+    const threadId = newPanelThreadId();
+    const sessionKey = await buildPanelSessionKey(urlKey, threadId);
+    panelChatSessionRef.current = { threadId, sessionKey };
+    const welcome: Msg[] = [
+      { role: 'assistant', text: tString(localeRef.current, 'defaultWelcome') },
+    ];
+    setMessages(welcome);
+    try {
+      await putPanelChatRecord({
+        urlKey,
+        threadId,
+        sessionKey,
+        messages: panelMessagesToStored(welcome),
+        updatedAt: Date.now(),
+      });
+    } catch (e) {
+      console.error('OpenClaw panel chat save failed:', e);
+    }
+  }, [isStreaming, panelChatReady]);
+
   const sendWithText = useCallback(
     async (raw: string) => {
       const text = raw.trim();
-      if (!text || isStreaming) return;
+      if (!text || isStreaming || !panelChatReady) return;
 
       const tab = await getActiveTab();
       const tabId = tab?.id;
       const requestId = crypto.randomUUID();
+      const sendUrlKey = urlKeyRef.current;
+      streamUrlKeyRef.current = sendUrlKey;
+      streamPersistRef.current = {
+        urlKey: sendUrlKey,
+        threadId: panelChatSessionRef.current.threadId,
+        sessionKey: panelChatSessionRef.current.sessionKey,
+      };
 
       const { text: apiText } = composeUserMessageWithContext(
         text,
@@ -294,25 +480,31 @@ export default function Panel() {
       setInputValue('');
       setIsStreaming(true);
 
+      const sessionKey = panelChatSessionRef.current.sessionKey;
+
       chrome.runtime.sendMessage(
         {
           action: 'sendMessage',
           text: apiText,
           requestId,
           tabId,
+          sessionKey,
           context: { url: tab?.url ?? '', title: tab?.title ?? '' },
         },
         (response) => {
           if (chrome.runtime.lastError) {
             setIsStreaming(false);
             const err = chrome.runtime.lastError.message;
-            setMessages((prev) =>
-              prev.map((m) =>
+            setMessages((prev) => {
+              if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+              const next: Msg[] = prev.map((m) =>
                 m.streamId === requestId
-                  ? { role: 'assistant', text: 'Error: ' + err }
+                  ? { role: 'assistant' as const, text: 'Error: ' + err }
                   : m,
-              ),
-            );
+              );
+              queueMicrotask(() => persistPanelSnapshotForStream(next));
+              return next;
+            });
             return;
           }
           if (response?.streaming) {
@@ -320,37 +512,51 @@ export default function Panel() {
           }
           setIsStreaming(false);
           if (response?.success && typeof response.data === 'string') {
-            setMessages((prev) =>
-              prev.map((m) =>
+            setMessages((prev) => {
+              if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+              const next: Msg[] = prev.map((m) =>
                 m.streamId === requestId
-                  ? { role: 'assistant', text: response.data }
+                  ? { role: 'assistant' as const, text: response.data }
                   : m,
-              ),
-            );
+              );
+              queueMicrotask(() => persistPanelSnapshotForStream(next));
+              return next;
+            });
           } else {
-            setMessages((prev) =>
-              prev.map((m) =>
+            setMessages((prev) => {
+              if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+              const next: Msg[] = prev.map((m) =>
                 m.streamId === requestId
                   ? {
-                      role: 'assistant',
+                      role: 'assistant' as const,
                       text: 'Error: ' + (response?.error ?? 'Unknown error'),
                     }
                   : m,
-              ),
-            );
+              );
+              queueMicrotask(() => persistPanelSnapshotForStream(next));
+              return next;
+            });
           }
         },
       );
     },
-    [contextMode, isStreaming, locale, pageContext, selectionText],
+    [
+      contextMode,
+      isStreaming,
+      locale,
+      pageContext,
+      panelChatReady,
+      persistPanelSnapshotForStream,
+      selectionText,
+    ],
   );
 
   sendWithTextRef.current = sendWithText;
 
   const sendMessage = useCallback(() => {
-    if (isStreaming) return;
+    if (isStreaming || !panelChatReady) return;
     void sendWithText(inputValue);
-  }, [inputValue, isStreaming, sendWithText]);
+  }, [inputValue, isStreaming, panelChatReady, sendWithText]);
 
   const processQuickAction = useCallback(
     async (template: string, extra: { text?: string } = {}) => {
@@ -402,6 +608,7 @@ export default function Panel() {
         request.requestId &&
         typeof request.delta === 'string'
       ) {
+        if (streamUrlKeyRef.current !== urlKeyRef.current) return;
         setMessages((prev) =>
           prev.map((m) =>
             m.streamId === request.requestId
@@ -412,34 +619,40 @@ export default function Panel() {
         return;
       }
       if (request.action === 'streamComplete' && request.requestId) {
-        setMessages((prev) =>
-          prev.map((m) =>
+        setMessages((prev) => {
+          if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+          const next: Msg[] = prev.map((m) =>
             m.streamId === request.requestId
               ? { role: m.role, text: m.text }
               : m,
-          ),
-        );
+          );
+          queueMicrotask(() => persistPanelSnapshotForStream(next));
+          return next;
+        });
         setIsStreaming(false);
         return;
       }
       if (request.action === 'streamError' && request.requestId) {
-        setMessages((prev) =>
-          prev.map((m) =>
+        setMessages((prev) => {
+          if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+          const next: Msg[] = prev.map((m) =>
             m.streamId === request.requestId
               ? {
-                  role: 'assistant',
+                  role: 'assistant' as const,
                   text: 'Error: ' + (request.error ?? 'Unknown error'),
                 }
               : m,
-          ),
-        );
+          );
+          queueMicrotask(() => persistPanelSnapshotForStream(next));
+          return next;
+        });
         setIsStreaming(false);
         return;
       }
     };
     chrome.runtime.onMessage.addListener(onMsg);
     return () => chrome.runtime.onMessage.removeListener(onMsg);
-  }, []);
+  }, [persistPanelSnapshotForStream]);
 
   const onInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputValue(e.target.value);
@@ -451,7 +664,7 @@ export default function Panel() {
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (!isStreaming) void sendMessage();
+      if (!isStreaming && panelChatReady) void sendMessage();
     }
   };
 
@@ -473,11 +686,15 @@ export default function Panel() {
     </button>
   );
 
+  const panelLayoutStyle = {
+    '--openclaw-panel-header-height': `${layoutOffsets.headerHeight}px`,
+    '--openclaw-panel-composer-height': `${layoutOffsets.composerHeight}px`,
+  } as React.CSSProperties;
+
   return (
-    <div className="openclaw-panel-root">
-      <div className="openclaw-panel-header">
+    <div className="openclaw-panel-root" style={panelLayoutStyle}>
+      <div ref={headerRef} className="openclaw-panel-header">
         <div className="openclaw-panel-header-main">
-          <span className="openclaw-title">{t('assistantName')}</span>
           {pageContext.title ? (
             <span
               className="openclaw-page-title"
@@ -503,28 +720,6 @@ export default function Panel() {
         </div>
       </div>
 
-      <div className="openclaw-panel-quick">
-        <div className="openclaw-panel-quick-block">
-          <div className="openclaw-panel-quick-title">{t('modePage')}</div>
-          <div className="openclaw-panel-quick-btns">
-            {pagePrompts.map((p) =>
-              quickBtn(p, () => void processQuickAction(p.prompt)),
-            )}
-          </div>
-        </div>
-        <div className="openclaw-panel-quick-block">
-          <div className="openclaw-panel-quick-title">{t('modeSelection')}</div>
-          <div className="openclaw-panel-quick-btns">
-            {selectionPrompts.map((p) =>
-              quickBtn(p, async () => {
-                const sel = (await getSelectionFromActiveTab()).trim();
-                void processQuickAction(p.prompt, { text: sel });
-              }),
-            )}
-          </div>
-        </div>
-      </div>
-
       <div className="openclaw-panel-chat">
         <div className="openclaw-messages">
           {messages.map((m, i) =>
@@ -544,39 +739,68 @@ export default function Panel() {
           )}
           <div ref={messagesEndRef} />
         </div>
-        <div className="openclaw-input-area">
-          <select
-            className="openclaw-context-select"
-            value={contextMode}
-            onChange={(e) => setContextMode(e.target.value as ContextMode)}
-            disabled={isStreaming}
-            aria-label={t('contextType')}
-            title={t('contextType')}
-          >
-            <option value="article">{t('contextArticle')}</option>
-            <option value="full">{t('contextFullPage')}</option>
-            {selectionText.trim() ? (
-              <option value="selection">{t('contextSelection')}</option>
-            ) : null}
-          </select>
-          <textarea
-            id="openclaw-input"
-            ref={inputRef}
-            placeholder={t('placeholder')}
-            rows={1}
-            value={inputValue}
-            disabled={isStreaming}
-            onChange={onInput}
-            onKeyDown={onKeyDown}
-          />
-          <button
-            type="button"
-            id="openclaw-send-btn"
-            disabled={isStreaming}
-            onClick={() => void sendMessage()}
-          >
-            <SendIcon className="openclaw-send-icon" />
-          </button>
+        <div ref={composerRef} className="openclaw-panel-composer">
+          <div className="openclaw-input-quick">
+            <div className="openclaw-panel-quick-title">
+              {contextMode === 'selection' ? t('modeSelection') : t('modePage')}
+            </div>
+            <div className="openclaw-panel-quick-btns">
+              {contextMode === 'selection'
+                ? selectionPrompts.map((p) =>
+                    quickBtn(p, async () => {
+                      const sel = (await getSelectionFromActiveTab()).trim();
+                      void processQuickAction(p.prompt, { text: sel });
+                    }),
+                  )
+                : pagePrompts.map((p) =>
+                    quickBtn(p, () => void processQuickAction(p.prompt)),
+                  )}
+            </div>
+          </div>
+          <div className="openclaw-input-area">
+            <select
+              className="openclaw-context-select"
+              value={contextMode}
+              onChange={(e) => setContextMode(e.target.value as ContextMode)}
+              disabled={isStreaming || !panelChatReady}
+              aria-label={t('contextType')}
+              title={t('contextType')}
+            >
+              <option value="article">{t('contextArticle')}</option>
+              <option value="full">{t('contextFullPage')}</option>
+              {selectionText.trim() ? (
+                <option value="selection">{t('contextSelection')}</option>
+              ) : null}
+            </select>
+            <textarea
+              id="openclaw-input"
+              ref={inputRef}
+              placeholder={t('placeholder')}
+              rows={1}
+              value={inputValue}
+              disabled={isStreaming || !panelChatReady}
+              onChange={onInput}
+              onKeyDown={onKeyDown}
+            />
+            <button
+              type="button"
+              className="openclaw-panel-clear-history-btn"
+              disabled={isStreaming || !panelChatReady}
+              aria-label={t('clearChatHistory')}
+              title={t('clearChatHistory')}
+              onClick={() => void clearChatHistory()}
+            >
+              <ClearChatIcon className="openclaw-icon-svg" />
+            </button>
+            <button
+              type="button"
+              id="openclaw-send-btn"
+              disabled={isStreaming || !panelChatReady}
+              onClick={() => void sendMessage()}
+            >
+              <SendIcon className="openclaw-send-icon" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

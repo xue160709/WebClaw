@@ -21,6 +21,17 @@ import {
 import { extractPageInPage } from '@src/lib/openclaw/extractPageInPage';
 import { tString, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
 import { parseOpenclawMarkdown } from '@src/lib/openclaw/markdown';
+import {
+  buildPanelSessionKey,
+  newPanelThreadId,
+  normalizePageUrlForChat,
+  panelMessagesToStored,
+  type PanelChatRecord,
+} from '@src/lib/openclaw/panelChatStore';
+import {
+  OPENCLAW_CHAT_HISTORY_GET,
+  OPENCLAW_CHAT_HISTORY_PUT,
+} from '@src/lib/openclaw/pageContextMessages';
 
 type Msg = { role: 'user' | 'assistant'; text: string; streamId?: string };
 
@@ -52,9 +63,12 @@ export default function OpenClawAssistant() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const didInitWelcome = useRef(false);
+  const [chatReady, setChatReady] = useState(false);
   const [headerTitle, setHeaderTitle] = useState(() =>
     typeof document !== 'undefined' ? document.title : '',
+  );
+  const [pageUrl, setPageUrl] = useState(() =>
+    typeof window !== 'undefined' ? window.location.href : '',
   );
   const [selectionText, setSelectionText] = useState('');
   const [contextMode, setContextMode] = useState<ContextMode>('article');
@@ -66,8 +80,56 @@ export default function OpenClawAssistant() {
   const iconContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+  const urlLoadGenRef = useRef(0);
+  const chatSessionRef = useRef({ threadId: '', sessionKey: '' });
+  const streamUrlKeyRef = useRef('');
+  const streamPersistRef = useRef({
+    urlKey: '',
+    threadId: '',
+    sessionKey: '',
+  });
+  const urlKeyRef = useRef(normalizePageUrlForChat(pageUrl));
+  urlKeyRef.current = normalizePageUrlForChat(pageUrl);
 
   const t = useCallback((key: string) => tString(locale, key), [locale]);
+
+  const getExtensionChatRecord = useCallback(async (rawUrl: string) => {
+    const response = (await chrome.runtime.sendMessage({
+      action: OPENCLAW_CHAT_HISTORY_GET,
+      url: rawUrl,
+    })) as { ok?: boolean; record?: PanelChatRecord | null; error?: string };
+    if (!response?.ok) {
+      throw new Error(response?.error ?? 'Failed to load chat history');
+    }
+    return response.record ?? undefined;
+  }, []);
+
+  const putExtensionChatRecord = useCallback(async (record: PanelChatRecord) => {
+    const response = (await chrome.runtime.sendMessage({
+      action: OPENCLAW_CHAT_HISTORY_PUT,
+      record,
+    })) as { ok?: boolean; error?: string };
+    if (!response?.ok) {
+      throw new Error(response?.error ?? 'Failed to save chat history');
+    }
+  }, []);
+
+  const persistSnapshotForCurrentUrl = useCallback(
+    (msgs: Msg[]) => {
+      const { urlKey, threadId, sessionKey } = streamPersistRef.current;
+      if (!urlKey || !threadId || !sessionKey) return;
+      void putExtensionChatRecord({
+        urlKey,
+        threadId,
+        sessionKey,
+        messages: panelMessagesToStored(msgs),
+        updatedAt: Date.now(),
+      });
+    },
+    [putExtensionChatRecord],
+  );
 
   const loadFromStorage = useCallback(() => {
     chrome.storage.local.get(
@@ -78,12 +140,6 @@ export default function OpenClawAssistant() {
         }
         const loc = normalizeLocale(result[STORAGE.LANGUAGE] as string | undefined);
         setLocale(loc);
-        if (!didInitWelcome.current) {
-          didInitWelcome.current = true;
-          setMessages([
-            { role: 'assistant', text: tString(loc, 'defaultWelcome') },
-          ]);
-        }
         if (result[STORAGE.ICON_POS]) {
           const pos = result[STORAGE.ICON_POS] as { left: number; top: number };
           const el = iconContainerRef.current;
@@ -121,13 +177,79 @@ export default function OpenClawAssistant() {
   }, [loadFromStorage]);
 
   useEffect(() => {
+    if (!chatReady) return;
+    const knownWelcomes = new Set(
+      (['en', 'zh-CN'] as const).map((l) => tString(l, 'defaultWelcome')),
+    );
     setMessages((prev) => {
-      if (prev.length === 1 && prev[0].role === 'assistant') {
-        return [{ role: 'assistant', text: tString(locale, 'defaultWelcome') }];
+      if (prev.length === 1 && prev[0].role === 'assistant' && !prev[0].streamId) {
+        if (!knownWelcomes.has(prev[0].text)) return prev;
+        const next: Msg[] = [{ role: 'assistant', text: tString(locale, 'defaultWelcome') }];
+        if (next[0].text === prev[0].text) return prev;
+        queueMicrotask(() => {
+          const urlKey = urlKeyRef.current;
+          const { threadId, sessionKey } = chatSessionRef.current;
+          if (!threadId || !sessionKey) return;
+          void putExtensionChatRecord({
+            urlKey,
+            threadId,
+            sessionKey,
+            messages: panelMessagesToStored(next),
+            updatedAt: Date.now(),
+          });
+        });
+        return next;
       }
       return prev;
     });
-  }, [locale]);
+  }, [chatReady, locale, putExtensionChatRecord]);
+
+  useEffect(() => {
+    const urlKey = normalizePageUrlForChat(pageUrl);
+    const gen = ++urlLoadGenRef.current;
+    setChatReady(false);
+    setIsStreaming(false);
+    void (async () => {
+      try {
+        const rec = await getExtensionChatRecord(pageUrl);
+        if (gen !== urlLoadGenRef.current) return;
+        const welcomeText = tString(localeRef.current, 'defaultWelcome');
+        if (rec) {
+          const sessionKey = await buildPanelSessionKey(urlKey, rec.threadId);
+          chatSessionRef.current = { threadId: rec.threadId, sessionKey };
+          setMessages(rec.messages as Msg[]);
+          if (rec.sessionKey !== sessionKey) {
+            await putExtensionChatRecord({
+              ...rec,
+              sessionKey,
+              updatedAt: Date.now(),
+            });
+          }
+        } else {
+          const threadId = newPanelThreadId();
+          const sessionKey = await buildPanelSessionKey(urlKey, threadId);
+          const welcome: Msg[] = [{ role: 'assistant', text: welcomeText }];
+          chatSessionRef.current = { threadId, sessionKey };
+          setMessages(welcome);
+          await putExtensionChatRecord({
+            urlKey,
+            threadId,
+            sessionKey,
+            messages: panelMessagesToStored(welcome),
+            updatedAt: Date.now(),
+          });
+        }
+        if (gen === urlLoadGenRef.current) setChatReady(true);
+      } catch (error) {
+        console.error('OpenClaw content chat load failed:', error);
+        if (gen !== urlLoadGenRef.current) return;
+        const welcomeText = tString(localeRef.current, 'defaultWelcome');
+        setMessages([{ role: 'assistant', text: welcomeText }]);
+        chatSessionRef.current = { threadId: '', sessionKey: '' };
+        if (gen === urlLoadGenRef.current) setChatReady(true);
+      }
+    })();
+  }, [getExtensionChatRecord, pageUrl, putExtensionChatRecord]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: 'end' });
@@ -153,12 +275,17 @@ export default function OpenClawAssistant() {
     };
   }, [dialogOpen]);
 
+  const syncPageMeta = useCallback(() => {
+    setHeaderTitle(document.title);
+    setPageUrl(window.location.href);
+  }, []);
+
   useEffect(() => {
     if (!dialogOpen) return;
-    const onNav = () => setHeaderTitle(document.title);
+    const onNav = () => syncPageMeta();
     window.addEventListener('popstate', onNav);
     return () => window.removeEventListener('popstate', onNav);
-  }, [dialogOpen]);
+  }, [dialogOpen, syncPageMeta]);
 
   const positionDialog = useCallback(() => {
     const iconEl = iconContainerRef.current;
@@ -187,11 +314,11 @@ export default function OpenClawAssistant() {
   }, []);
 
   const syncTitleAndSelection = useCallback(() => {
-    setHeaderTitle(document.title);
+    syncPageMeta();
     const sel = window.getSelection()?.toString().trim() ?? '';
     setSelectionText(sel);
     setContextMode(sel ? 'selection' : 'article');
-  }, []);
+  }, [syncPageMeta]);
 
   const openDialog = useCallback(() => {
     setHoverOpen(false);
@@ -213,7 +340,7 @@ export default function OpenClawAssistant() {
   const sendWithText = useCallback(
     (raw: string) => {
       const text = raw.trim();
-      if (!text || isStreaming) return;
+      if (!text || isStreaming || !chatReady) return;
 
       const extract = extractPageInPage();
       const liveSel = window.getSelection()?.toString().trim() ?? '';
@@ -231,6 +358,13 @@ export default function OpenClawAssistant() {
       );
 
       const requestId = crypto.randomUUID();
+      const sendUrlKey = urlKeyRef.current;
+      streamUrlKeyRef.current = sendUrlKey;
+      streamPersistRef.current = {
+        urlKey: sendUrlKey,
+        threadId: chatSessionRef.current.threadId,
+        sessionKey: chatSessionRef.current.sessionKey,
+      };
       setMessages((prev) => [
         ...prev,
         { role: 'user', text },
@@ -239,60 +373,84 @@ export default function OpenClawAssistant() {
       setInputValue('');
       setIsStreaming(true);
 
-      chrome.runtime.sendMessage(
-        {
-          action: 'sendMessage',
-          text: apiText,
-          requestId,
-          context: { url: window.location.href, title: document.title },
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
+      try {
+        chrome.runtime.sendMessage(
+          {
+            action: 'sendMessage',
+            text: apiText,
+            requestId,
+            sessionKey: chatSessionRef.current.sessionKey,
+            context: { url: window.location.href, title: document.title },
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              setIsStreaming(false);
+              const err = chrome.runtime.lastError.message;
+              setMessages((prev) => {
+                if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+                const next: Msg[] = prev.map((m) =>
+                  m.streamId === requestId
+                    ? { role: 'assistant' as const, text: 'Error: ' + err }
+                    : m,
+                );
+                queueMicrotask(() => persistSnapshotForCurrentUrl(next));
+                return next;
+              });
+              return;
+            }
+            if (response?.streaming) {
+              return;
+            }
             setIsStreaming(false);
-            const err = chrome.runtime.lastError.message;
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.streamId === requestId
-                  ? { role: 'assistant', text: 'Error: ' + err }
-                  : m,
-              ),
-            );
-            return;
-          }
-          if (response?.streaming) {
-            return;
-          }
-          setIsStreaming(false);
-          if (response?.success && typeof response.data === 'string') {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.streamId === requestId
-                  ? { role: 'assistant', text: response.data }
-                  : m,
-              ),
-            );
-          } else {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.streamId === requestId
-                  ? {
-                      role: 'assistant',
-                      text: 'Error: ' + (response?.error ?? 'Unknown error'),
-                    }
-                  : m,
-              ),
-            );
-          }
-        },
-      );
+            if (response?.success && typeof response.data === 'string') {
+              setMessages((prev) => {
+                if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+                const next: Msg[] = prev.map((m) =>
+                  m.streamId === requestId
+                    ? { role: 'assistant' as const, text: response.data }
+                    : m,
+                );
+                queueMicrotask(() => persistSnapshotForCurrentUrl(next));
+                return next;
+              });
+            } else {
+              setMessages((prev) => {
+                if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+                const next: Msg[] = prev.map((m) =>
+                  m.streamId === requestId
+                    ? {
+                        role: 'assistant' as const,
+                        text: 'Error: ' + (response?.error ?? 'Unknown error'),
+                      }
+                    : m,
+                );
+                queueMicrotask(() => persistSnapshotForCurrentUrl(next));
+                return next;
+              });
+            }
+          },
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setIsStreaming(false);
+        setMessages((prev) => {
+          const next: Msg[] = prev.map((m) =>
+            m.streamId === requestId
+              ? { role: 'assistant' as const, text: 'Error: ' + message }
+              : m,
+          );
+          queueMicrotask(() => persistSnapshotForCurrentUrl(next));
+          return next;
+        });
+      }
     },
-    [contextMode, isStreaming, locale, selectionText],
+    [chatReady, contextMode, isStreaming, locale, persistSnapshotForCurrentUrl, selectionText],
   );
 
   const sendMessage = useCallback(() => {
-    if (isStreaming) return;
+    if (isStreaming || !chatReady) return;
     sendWithText(inputValue);
-  }, [inputValue, isStreaming, sendWithText]);
+  }, [chatReady, inputValue, isStreaming, sendWithText]);
 
   const processQuickAction = useCallback(
     (template: string, extra: { text?: string } = {}) => {
@@ -364,6 +522,7 @@ export default function OpenClawAssistant() {
         request.requestId &&
         typeof request.delta === 'string'
       ) {
+        if (streamUrlKeyRef.current !== urlKeyRef.current) return;
         setMessages((prev) =>
           prev.map((m) =>
             m.streamId === request.requestId
@@ -374,32 +533,38 @@ export default function OpenClawAssistant() {
         return;
       }
       if (request.action === 'streamComplete' && request.requestId) {
-        setMessages((prev) =>
-          prev.map((m) =>
+        setMessages((prev) => {
+          if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+          const next: Msg[] = prev.map((m) =>
             m.streamId === request.requestId
               ? { role: m.role, text: m.text }
               : m,
-          ),
-        );
+          );
+          queueMicrotask(() => persistSnapshotForCurrentUrl(next));
+          return next;
+        });
         setIsStreaming(false);
         return;
       }
       if (request.action === 'streamError' && request.requestId) {
-        setMessages((prev) =>
-          prev.map((m) =>
+        setMessages((prev) => {
+          if (streamUrlKeyRef.current !== urlKeyRef.current) return prev;
+          const next: Msg[] = prev.map((m) =>
             m.streamId === request.requestId
               ? {
-                  role: 'assistant',
+                  role: 'assistant' as const,
                   text: 'Error: ' + (request.error ?? 'Unknown error'),
                 }
               : m,
-          ),
-        );
+          );
+          queueMicrotask(() => persistSnapshotForCurrentUrl(next));
+          return next;
+        });
         setIsStreaming(false);
         return;
       }
       if (request.action !== 'injectText') return;
-      setHeaderTitle(document.title);
+      syncPageMeta();
       const sel = window.getSelection()?.toString().trim() ?? '';
       setSelectionText(sel);
       setContextMode(sel ? 'selection' : 'article');
@@ -418,7 +583,7 @@ export default function OpenClawAssistant() {
     };
     chrome.runtime.onMessage.addListener(onMsg);
     return () => chrome.runtime.onMessage.removeListener(onMsg);
-  }, [sendWithText]);
+  }, [persistSnapshotForCurrentUrl, sendWithText, syncPageMeta]);
 
   useEffect(() => {
     const icon = iconContainerRef.current?.querySelector<HTMLElement>(
@@ -563,9 +728,8 @@ export default function OpenClawAssistant() {
       >
         <div className="openclaw-header">
           <div className="openclaw-header-main">
-            <span className="openclaw-title">{t('assistantName')}</span>
             {headerTitle ? (
-              <span className="openclaw-page-title" title={window.location.href}>
+              <span className="openclaw-page-title" title={pageUrl}>
                 {headerTitle}
               </span>
             ) : null}
@@ -624,7 +788,7 @@ export default function OpenClawAssistant() {
             className="openclaw-context-select"
             value={contextMode}
             onChange={(e) => setContextMode(e.target.value as ContextMode)}
-            disabled={isStreaming}
+            disabled={isStreaming || !chatReady}
             aria-label={t('contextType')}
             title={t('contextType')}
           >
@@ -640,14 +804,14 @@ export default function OpenClawAssistant() {
             placeholder={t('placeholder')}
             rows={1}
             value={inputValue}
-            disabled={isStreaming}
+            disabled={isStreaming || !chatReady}
             onChange={onInput}
             onKeyDown={onKeyDown}
           />
           <button
             type="button"
             id="openclaw-send-btn"
-            disabled={isStreaming}
+            disabled={isStreaming || !chatReady}
             onClick={sendMessage}
           >
             <SendIcon className="openclaw-send-icon" />

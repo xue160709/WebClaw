@@ -10,7 +10,18 @@ import {
 } from '@src/lib/openclaw/gateway';
 import { tString, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
 import {
+  buildPanelSessionKey,
+  deletePanelChatRecord,
+  getPanelChatRecord,
+  normalizePageUrlForChat,
+  putPanelChatRecord,
+  type PanelChatRecord,
+} from '@src/lib/openclaw/panelChatStore';
+import {
   OPENCLAW_ACTIVE_TAB_CONTEXT,
+  OPENCLAW_CHAT_HISTORY_DELETE,
+  OPENCLAW_CHAT_HISTORY_GET,
+  OPENCLAW_CHAT_HISTORY_PUT,
   OPENCLAW_GET_PAGE_EXTRACT,
   OPENCLAW_REQUEST_ACTIVE_TAB_CONTEXT,
   OPENCLAW_SELECTION_CHANGED,
@@ -317,6 +328,76 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request?.action === OPENCLAW_CHAT_HISTORY_GET) {
+    void (async () => {
+      try {
+        const rawUrl = String(request.url ?? '');
+        const urlKey = normalizePageUrlForChat(rawUrl);
+        const rec = await getPanelChatRecord(urlKey);
+        if (!rec) {
+          sendResponse({ ok: true, urlKey, record: null });
+          return;
+        }
+        const sessionKey = await buildPanelSessionKey(urlKey, rec.threadId);
+        const nextRecord =
+          rec.sessionKey === sessionKey
+            ? rec
+            : {
+                ...rec,
+                sessionKey,
+                updatedAt: Date.now(),
+              };
+        if (nextRecord !== rec) {
+          await putPanelChatRecord(nextRecord);
+        }
+        sendResponse({ ok: true, urlKey, record: nextRecord });
+      } catch (error: unknown) {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
+    return true;
+  }
+
+  if (request?.action === OPENCLAW_CHAT_HISTORY_PUT) {
+    void (async () => {
+      try {
+        const record = request.record as PanelChatRecord | undefined;
+        if (!record?.urlKey || !record.threadId || !record.sessionKey) {
+          sendResponse({ ok: false, error: 'Invalid chat history record' });
+          return;
+        }
+        await putPanelChatRecord(record);
+        sendResponse({ ok: true });
+      } catch (error: unknown) {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
+    return true;
+  }
+
+  if (request?.action === OPENCLAW_CHAT_HISTORY_DELETE) {
+    void (async () => {
+      try {
+        const rawUrl = String(request.url ?? '');
+        const urlKey = normalizePageUrlForChat(rawUrl);
+        await deletePanelChatRecord(urlKey);
+        sendResponse({ ok: true, urlKey });
+      } catch (error: unknown) {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
+    return true;
+  }
+
   if (request?.action === 'openOptions') {
     void chrome.runtime.openOptionsPage();
     return;
@@ -327,7 +408,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       typeof request.tabId === 'number' ? request.tabId : sender.tab?.id;
 
     void (async () => {
-      const prep = await prepareChatCompletionPost(text, true);
+      const sessionKey =
+        typeof request.sessionKey === 'string' && request.sessionKey.trim()
+          ? request.sessionKey.trim()
+          : undefined;
+      const prep = await prepareChatCompletionPost(text, true, { sessionKey });
       if (!prep.ok) {
         sendResponse({ success: false, error: prep.error });
         return;

@@ -41,6 +41,7 @@ export const OPENCLAW_I18N: Record<
     contextType: 'Context',
     contextTruncated: '[truncated]',
     pageUnreadable: 'Page content unavailable',
+    clearChatHistory: 'Clear chat',
   },
   'zh-CN': {
     settingsTitle: '龙虾助理设置',
@@ -77,6 +78,7 @@ export const OPENCLAW_I18N: Record<
     contextType: '上下文',
     contextTruncated: '[已截断]',
     pageUnreadable: '无法读取页面内容',
+    clearChatHistory: '清除对话',
   },
 };
 

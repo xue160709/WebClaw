@@ -24,6 +24,7 @@ export type PreparedChatPost =
 export async function prepareChatCompletionPost(
   text: string,
   stream: boolean,
+  options?: { sessionKey?: string },
 ): Promise<PreparedChatPost> {
   const storage = await chrome.storage.local.get([
     STORAGE.TOKEN,
@@ -32,8 +33,9 @@ export async function prepareChatCompletionPost(
   ]);
   const token = storage[STORAGE.TOKEN] as string | undefined;
   let gateway = (storage[STORAGE.GATEWAY] as string) || DEFAULT_GATEWAY;
-  const sessionKey =
+  const storedSessionKey =
     (storage[STORAGE.SESSION_KEY] as string) || DEFAULT_SESSION;
+  const overrideSessionKey = options?.sessionKey?.trim();
 
   if (!token) {
     return {
@@ -51,6 +53,7 @@ export async function prepareChatCompletionPost(
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
   };
+  const sessionKey = overrideSessionKey || storedSessionKey;
   if (sessionKey) headers['x-openclaw-session-key'] = sessionKey;
 
   return {

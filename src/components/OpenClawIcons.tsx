@@ -28,16 +28,6 @@ function SvgIcon({
   );
 }
 
-export function SparkIcon({ className }: IconProps) {
-  return (
-    <SvgIcon className={className}>
-      <path d="M12 3 13.9 8.1 19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z" />
-      <path d="M19 3v4" />
-      <path d="M21 5h-4" />
-    </SvgIcon>
-  );
-}
-
 export function SettingsIcon({ className }: IconProps) {
   return (
     <SvgIcon className={className}>
@@ -92,6 +82,19 @@ export function SendIcon({ className }: IconProps) {
     <SvgIcon className={className}>
       <path d="M4 12h12" />
       <path d="m12 6 6 6-6 6" />
+    </SvgIcon>
+  );
+}
+
+/** 清除对话 / 清空历史 */
+export function ClearChatIcon({ className }: IconProps) {
+  return (
+    <SvgIcon className={className}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
     </SvgIcon>
   );
 }

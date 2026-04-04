@@ -11,6 +11,12 @@ export const OPENCLAW_SELECTION_SYNC = 'openclaw:selectionSync' as const;
 export const OPENCLAW_REQUEST_ACTIVE_TAB_CONTEXT =
   'openclaw:requestActiveTabContext' as const;
 
+export const OPENCLAW_CHAT_HISTORY_GET = 'openclaw:chatHistoryGet' as const;
+
+export const OPENCLAW_CHAT_HISTORY_PUT = 'openclaw:chatHistoryPut' as const;
+
+export const OPENCLAW_CHAT_HISTORY_DELETE = 'openclaw:chatHistoryDelete' as const;
+
 export type PageContextSnapshot = {
   title: string;
   url: string;

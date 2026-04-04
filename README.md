@@ -1,177 +1,139 @@
 <div align="center">
-<img src="public/icon-128.png" alt="logo"/>
-<h1> Minimalist Chrome/Firefox Extension Boilerplate with<br/>React + Vite + TypeScript + TailwindCSS</h1>
-
-<h5>
-This template repository is a side product of my Chrome Extension <a target="_blank" rel="noopener noreferrer" href="https://chrome.google.com/webstore/detail/supatabs/icbcnjlaegndjabnjbaeihnnmidbfigk">Supatabs</a>.
-<br />
-If you tend to have tons of tabs open, or are a OneTab user, make sure to check it out <a target="_blank" rel="noopener noreferrer" href="https://chrome.google.com/webstore/detail/supatabs/icbcnjlaegndjabnjbaeihnnmidbfigk">here</a>!
-</h5>
-
-<h5>Supatabs is an example and showcase of what you can develop with this template. (anything you want, really 🚀)</h5>
-
+<img src="public/icon-128.png" alt="OpenClaw Web Assistant" width="96"/>
+<h1>OpenClaw Web Assistant</h1>
+<p><strong>Connect to your OpenClaw gateway from the side panel and an in-page assistant while you browse—chat, page understanding, and quick prompts.</strong></p>
+<p><em>Chrome / Firefox extension · Manifest V3 · React + Vite + TypeScript + Tailwind CSS 4</em></p>
+<p>简体中文说明见 <a href="./README-CN.md">README-CN.md</a></p>
 </div>
 
-## Table of Contents
+---
 
-- [Intro](#intro)
-- [Features](#features)
-- [Usage](#usage)
-  - [Getting Started](#gettingStarted) 
-  - [Customization](#customization)
-  - [Publish](#publish)
-- [Tech Docs](#tech)
-- [Credit](#credit)
-- [Contributing](#contributing)
+## Overview
 
+**OpenClaw Web Assistant** is a browser extension that extracts the page title, main article text (Readability + Markdown), selection, and full-page plain text, then sends your messages (optionally with page context) to a local or remote **OpenClaw gateway** through an **OpenAI-compatible `/v1/chat/completions` endpoint**, displaying responses in streaming or non-streaming mode.
 
-## Intro <a name="intro"></a>
-This boilerplate is meant to be a minimal quick start for creating chrome/firefox extensions using React, Typescript and Tailwind CSS.
+The extension does **not** run the model itself. You need a compatible gateway (default base URL: `http://localhost:18789`) and must set your **Token** and optional **Session Key** on the options page.
 
-It includes all possible pages such as **new tab**, **dev panel**, **pop up**, etc., as well as corresponding manifest settings by default.
-You will likely have to customize/delete some of the pages (see docs below).
+## Features
 
-You can build dist files for both Chrome and Firefox with manifest v3.
+| Feature | Description |
+|--------|-------------|
+| **Side panel chat (Chrome)** | Toolbar icon opens the Side Panel; syncs context for the active tab; multi-turn chat and streaming. |
+| **In-page floating assistant** | Content script injects a draggable icon and chat UI; hover quick prompts; fullscreen; chat history persisted per page URL. |
+| **Context menu** | Configurable page-level and selection-level prompts; `{url}` and `{text}` placeholders; on Chrome, can open the side panel and fill/auto-send. |
+| **Page context modes** | Article (Readability), full-page text, or current selection; context capped around 16k characters with truncation notice. |
+| **Options** | Gateway URL, token, session key, UI language (简体中文 / English), multiple quick prompts. |
+| **Firefox** | Build strips `sidePanel`; floating assistant and context-menu injection are primary (see below). |
 
-If you are looking for a React focused way to access the local storage, I also implemented a chrome local/sync storage hook. The hook works
-well with this template. [Check it out here](https://gist.github.com/JohnBra/c81451ea7bc9e77f8021beb4f198ab96).
+## Requirements & permissions
 
-## Features <a name="features"></a>
-- [React 19](https://reactjs.org/)
-- [TypeScript](https://www.typescriptlang.org/)
-- [Tailwind CSS 4](https://tailwindcss.com/)
-- [i18n (optional)](https://developer.chrome.com/docs/extensions/reference/api/i18n)
-- [Cross browser development with polyfill (optional)](https://github.com/mozilla/webextension-polyfill?tab=readme-ov-file#basic-setup-with-module-bundlers)
-- [ESLint](https://eslint.org/)
-- [Chrome Extension Manifest Version 3](https://developer.chrome.com/docs/extensions/mv3/intro/)
-- [Github Action](https://github.com/JohnBra/vite-web-extension/actions/workflows/ci.yml) to build and zip your extension (manual trigger)
+- **Node.js**: 18+ recommended (matches CI).
+- **Chrome**: Side Panel API recommended for the full side-panel experience.
+- **Manifest**: `storage`, `contextMenus`, `activeTab`, `sidePanel` (Chrome), `scripting`, `tabs`, and `<all_urls>` `host_permissions` for the content script and page extraction.
 
-## Usage <a name="usage"></a>
+## Quick start
 
-### Getting Started <a name="gettingStarted"></a>
+### 1. Install dependencies
 
-#### Developing and building
-This template comes with build configs for both Chrome and Firefox. Running
-`dev` or `build` commands without specifying the browser target will build
-for Chrome by default.
-
-1. Clone this repository or click "Use this template"
-2. Change `name` and `description` in `manifest.json`
-3. Run `yarn` or `npm i` (check your node version >= 16)
-4. Run `yarn dev[:chrome|:firefox]`, or `npm run dev[:chrome|:firefox]`
-
-Running a `dev` command will build your extension and watch for changes in the 
-source files. Changing the source files will refresh the corresponding 
-`dist_<chrome|firefox>` folder.
-
-To create an optimized production build, run `yarn build[:chrome|:firefox]`, or
-`npm run build[:chrome|:firefox]`.
-
-#### Load your extension
-For Chrome
-1. Open - Chrome browser
-2. Access - [chrome://extensions](chrome://extensions)
-3. Tick - Developer mode
-4. Find - Load unpacked extension
-5. Select - `dist_chrome` folder in this project (after dev or build)
-
-For Firefox
-1. Open - Firefox browser
-2. Access - [about:debugging#/runtime/this-firefox](about:debugging#/runtime/this-firefox)
-3. Click - Load temporary Add-on
-4. Select - any file in `dist_firefox` folder (i.e. `manifest.json`) in this project (after dev or build)
-
-### Customization <a name="customization"></a>
-
-#### Adding / removing pages
-This project ships the extension pages you need (e.g. Dev Tools, Popup, Options, Side Panel). You can add or
-remove pages by adjusting `manifest.json` and the `src/pages/*` entries.
-
-Some pages like the "Side Panel" don't work the exact same in Chrome and Firefox. While this template includes
-the source code for the side panel, it won't automatically be included in the dist file to prevent cross browser
-build warnings.
-
-To include the side panel for Chrome add the following to the `manifest.json`:
-
-```typescript
-{
-  "manifest_version": 3,
-  // ...
-  "permissions": [
-    "activeTab",
-    "sidePanel" // <-- permission for sidepanel
-  ],
-  // ...
-  "side_panel": {
-    "default_path": "src/pages/panel/index.html" // <-- tell vite to include it in the build files
-  },
-  // ...
-}
+```bash
+npm install
+# or
+yarn
 ```
 
-If you need to declare pages in addition to the manifest pages, e.g. a custom `app` page, create a 
-new folder in the `pages` directory and add the corresponding `.html`, `.tsx` and `.css` 
-files (see `options/*` for an example to copy). Then include the root html in the `vite.config.base.ts` 
-file under `build.rollupOptions.input` like so:
+### 2. Dev build (watch mode)
 
-```typescript
-// ...
-build: {
-   rollupOptions: {
-      input: {
-         app: resolve(pagesDir, "app", "index.html"),
-      },
-      output: {
-         entryFileNames: (chunk) => `src/pages/${chunk.name}/index.js`,
-      },
-   },
-}
-// ...
+Default target is **Chrome**:
+
+```bash
+npm run dev
+# or
+yarn dev
 ```
 
-#### Styling
-CSS files in the `src/pages/*` directories are not necessary. They are left in there in case you want 
-to use it in combination with Tailwind CSS. **Feel free to delete them**.
+**Firefox:**
 
-Tailwind can be configured, themed and extended according to the [docs](https://tailwindcss.com/docs/theme).
+```bash
+npm run dev:firefox
+# or
+yarn dev:firefox
+```
 
-#### Internationalization (i18n)
-To enable internationalization set the `localize` flag in the `vite.config.base.ts` to `true`.
+### 3. Load the extension
 
-The template includes a directory `locales` with a basic setup for english i18n. Enabling i18n
-will pull the name and description for your extension from the english translation files instead
-of the manifest.
+**Chrome**
 
-Follow the instructions in the [official docs](https://developer.chrome.com/docs/extensions/reference/api/i18n#description) 
-to add other translations and retrieve them in the extension.
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. **Load unpacked** → select the **`dist_chrome`** folder (created after dev or build)
 
-If you don't need i18n you can ignore the `locales` directory until you need it, as it won't
-be copied into the build folder unless the `localize` flag is set to `true`.
+**Firefox**
 
-### Publish your extension to the CWS<a name="publish"></a>
-To upload an extension to the Chrome store you have to pack (zip) it and then upload it to your item 
-in the Chrome Web Store.
+1. Open `about:debugging#/runtime/this-firefox`
+2. **Load Temporary Add-on** → pick `manifest.json` under **`dist_firefox`**
 
-This repo includes a Github Action Workflow to create a 
-[optimized prod build and the zip file](https://github.com/JohnBra/vite-web-extension/actions/workflows/ci.yml).
+### 4. Configure the gateway
 
-To run the workflow do the following:
-1. Go to the **"Actions"** tab in your forked repository from this template
-2. In the left sidebar click on **"Build and Zip Chrome Extension"**
-3. Click on **"Run Workflow"** and select the main branch, then **"Run Workflow"**
-4. Refresh the page and click the most recent run
-5. In the summary page **"Artifacts"** section click on the generated **"vite-web-extension-chrome"**
-6. Upload this file to the Chrome Web Store as described [here](https://developer.chrome.com/docs/webstore/publish/)
+1. Open the popup from the toolbar or open **Options** from the extension menu.
+2. Set **OpenClaw Token** (required), **gateway URL** (default `http://localhost:18789`; the extension normalizes to `.../v1/chat/completions`), and **Session Key** (default `agent:main:main`, adjust per your gateway).
+3. Save, then chat from the side panel or the floating assistant.
 
-# Tech Docs <a name="tech"></a>
-- [Vite](https://vitejs.dev/)
-- [Vite Plugins](https://vitejs.dev/guide/api-plugin.html)
-- [Chrome Extension with manifest 3](https://developer.chrome.com/docs/extensions/mv3/)
-- [Chrome Extension i18n](https://developer.chrome.com/docs/extensions/reference/api/i18n#description)
-- [Cross browser development with webextension-polyfill](https://github.com/mozilla/webextension-polyfill?tab=readme-ov-file#webextension-browser-api-polyfill)
-- [@crxjs/vite-plugin](https://crxjs.dev/vite-plugin)
-- [Rollup](https://rollupjs.org/guide/en/)
-- [Tailwind CSS 4](https://tailwindcss.com/docs/configuration)
+## Usage
 
-# Contributing <a name="contributing"></a>
-Feel free to open PRs or raise issues!
+- **Toolbar icon**: On Chrome, tied to the **side panel** via `sidePanel.setPanelBehavior` in the background worker.
+- **Floating assistant**: Draggable icon (often on the right); hover shows option-defined quick prompts; open the panel, pick a context mode, send.
+- **Context menu**: Root title and items follow locale and stored prompt lists; page items substitute the tab URL; selection items substitute `{text}`.
+- **Chat history**: Stored in `chrome.storage.local` keyed by normalized page URL and session (see `panelChatStore`) for multi-turn threads per page.
+
+## Chrome vs Firefox
+
+| | Chrome | Firefox |
+|---|--------|---------|
+| Side panel | Yes | No (`side_panel` removed from manifest) |
+| Context menu → open panel & auto-send | Yes | Falls back to injecting text into the content script and auto-send |
+| Output dir | `dist_chrome` | `dist_firefox` |
+
+Production: `npm run build:chrome` / `npm run build:firefox` (same with `yarn`).
+
+## Project layout (excerpt)
+
+```
+src/
+  lib/openclaw/          # Gateway client, page extract, context compose, i18n, chat persistence
+  pages/
+    background/          # Service worker: menus, side panel, messaging, stream relay
+    content/             # Floating assistant + in-page extraction
+    panel/               # Side panel UI
+    options/             # Settings
+    popup/               # Toolbar popup
+```
+
+Core pieces:
+
+- **`gateway.ts`**: Builds `Authorization: Bearer <token>`, optional `x-openclaw-session-key`, `model: "openclaw"` chat completions body; parses SSE or JSON.
+- **`extractPageInPage.ts`**: Runs in the page document with `@mozilla/readability` and `turndown` for article Markdown; uses `body.innerText` for full-page text.
+
+## Production build & CI
+
+```bash
+npm run build          # same as build:chrome
+npm run build:chrome
+npm run build:firefox
+```
+
+GitHub Actions (manual): `.github/workflows/ci.yml` uses Node 18, `yarn install`, and `yarn build:chrome`; uploads artifact `vite-web-extension-chrome` (legacy name from the template).
+
+## Tech stack
+
+- React 19, TypeScript, Vite 6, Tailwind CSS 4  
+- `@crxjs/vite-plugin`  
+- `webextension-polyfill`  
+- `@mozilla/readability`, `turndown`
+
+## License
+
+[MIT](LICENSE)
+
+## Contributing
+
+Issues and pull requests are welcome. If you change the manifest, permissions, or build targets, please note the impact on Chrome vs Firefox behavior.

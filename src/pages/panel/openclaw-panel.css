@@ -1,22 +1,35 @@
 @import '../../assets/styles/openclaw-theme.css';
 
 .openclaw-panel-root {
-  min-height: 100vh;
+  position: relative;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--oc-bg);
   color: var(--oc-text);
   font-family: var(--oc-font-sans);
 }
 
 .openclaw-panel-header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 20;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   padding: 14px;
-  background: var(--oc-surface);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--oc-surface) 94%, transparent) 0%,
+      color-mix(in srgb, var(--oc-surface) 82%, transparent) 100%
+    );
   border-bottom: 1px solid var(--oc-border);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
   font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
@@ -71,33 +84,47 @@
   flex-shrink: 0;
 }
 
-.openclaw-panel-quick {
+.openclaw-panel-composer {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  z-index: 20;
   flex-shrink: 0;
-  max-height: 42vh;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border: 1px solid color-mix(in srgb, var(--oc-border) 88%, transparent);
+  border-radius: 22px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--oc-surface) 84%, transparent) 0%,
+      color-mix(in srgb, var(--oc-surface) 92%, transparent) 100%
+    );
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  box-shadow:
+    0 10px 28px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.openclaw-input-quick {
+  flex-shrink: 0;
+  max-height: 22vh;
   overflow-y: auto;
-  padding: 12px;
-  background: var(--oc-canvas);
-  border-bottom: 1px solid var(--oc-border);
-}
-
-.openclaw-panel-quick-block {
-  margin-bottom: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  background: var(--oc-surface);
-  border: 1px solid var(--oc-border);
-  box-shadow: var(--oc-shadow);
-}
-
-.openclaw-panel-quick-block:last-child {
-  margin-bottom: 0;
+  padding: 2px 2px 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--oc-border) 62%, transparent);
+  background: transparent;
 }
 
 .openclaw-panel-quick-title {
-  margin-bottom: 8px;
-  font-size: 11px;
+  margin-bottom: 6px;
+  padding: 0 4px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--oc-text-muted);
 }
@@ -105,17 +132,18 @@
 .openclaw-panel-quick-btns {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .openclaw-panel-quick-btn {
   max-width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--oc-border);
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--oc-border) 74%, transparent);
   border-radius: 9999px;
-  background: var(--oc-surface-soft);
+  background: color-mix(in srgb, var(--oc-surface-soft) 48%, transparent);
   color: var(--oc-text);
-  font-size: 12px;
+  font-size: 11px;
   text-align: left;
   cursor: pointer;
   transition:
@@ -137,6 +165,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .openclaw-panel-chat.openclaw-fullscreen {
@@ -182,7 +211,10 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px;
+  padding: calc(var(--openclaw-panel-header-height, 0px) + 14px) 14px
+    calc(var(--openclaw-panel-composer-height, 0px) + 14px);
+  scroll-padding-top: calc(var(--openclaw-panel-header-height, 0px) + 14px);
+  scroll-padding-bottom: calc(var(--openclaw-panel-composer-height, 0px) + 14px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -219,19 +251,18 @@
   gap: 8px;
   align-items: flex-end;
   flex-shrink: 0;
-  padding: 12px;
-  background: linear-gradient(180deg, transparent 0%, var(--oc-canvas) 100%);
-  border-top: 1px solid var(--oc-border);
+  padding: 0;
+  background: transparent;
 }
 
 .openclaw-context-select {
   flex-shrink: 0;
   max-width: 5.5rem;
-  height: 42px;
+  height: 38px;
   padding: 0 8px;
-  border: 1px solid var(--oc-border);
-  border-radius: var(--oc-radius-input);
-  background: var(--oc-surface);
+  border: 1px solid color-mix(in srgb, var(--oc-border) 80%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--oc-surface) 70%, transparent);
   color: var(--oc-text);
   font-size: 12px;
   font-family: inherit;
@@ -251,12 +282,12 @@
 
 #openclaw-input {
   flex: 1;
-  min-height: 22px;
+  min-height: 20px;
   max-height: 140px;
-  padding: 12px 15px;
-  border: 1px solid var(--oc-border);
-  border-radius: var(--oc-radius-input);
-  background: var(--oc-surface);
+  padding: 9px 13px;
+  border: 1px solid color-mix(in srgb, var(--oc-border) 80%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--oc-surface) 70%, transparent);
   color: var(--oc-text);
   font-size: 14px;
   outline: none;
@@ -273,9 +304,45 @@
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--oc-primary) 16%, transparent);
 }
 
+.openclaw-panel-clear-history-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--oc-border) 80%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--oc-surface) 70%, transparent);
+  color: var(--oc-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.openclaw-panel-clear-history-btn:hover:not(:disabled) {
+  background: var(--oc-primary-soft);
+  border-color: var(--oc-border-strong);
+  color: var(--oc-primary-strong);
+}
+
+.openclaw-panel-clear-history-btn:focus-visible {
+  outline: none;
+  border-color: var(--oc-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--oc-primary) 16%, transparent);
+}
+
+.openclaw-panel-clear-history-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 #openclaw-send-btn {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border: 0;
   border-radius: 9999px;
   background: var(--oc-primary);
@@ -301,13 +368,13 @@
   opacity: 0.5;
 }
 
-.openclaw-panel-quick::-webkit-scrollbar,
+.openclaw-input-quick::-webkit-scrollbar,
 .openclaw-messages::-webkit-scrollbar,
 #openclaw-input::-webkit-scrollbar {
   width: 8px;
 }
 
-.openclaw-panel-quick::-webkit-scrollbar-thumb,
+.openclaw-input-quick::-webkit-scrollbar-thumb,
 .openclaw-messages::-webkit-scrollbar-thumb,
 #openclaw-input::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--oc-border-strong) 72%, transparent);

@@ -25,14 +25,17 @@ export function registerPageContextBridge(): void {
     debounce = setTimeout(() => {
       debounce = null;
       const text = window.getSelection()?.toString().trim() ?? '';
-      void chrome.runtime
-        .sendMessage({
+      try {
+        const p = chrome.runtime.sendMessage({
           action: OPENCLAW_SELECTION_CHANGED,
           text,
-        })
-        .catch(() => {
-          /* no receiver */
         });
+        void p.catch(() => {
+          /* no receiver or stale content-script context */
+        });
+      } catch {
+        /* extension context invalidated after reload */
+      }
     }, 220);
   });
 }
