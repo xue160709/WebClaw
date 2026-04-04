@@ -145,7 +145,7 @@
 .openclaw-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 16px 18px;
   background: var(--oc-surface);
@@ -155,11 +155,32 @@
   font-weight: 600;
 }
 
+.openclaw-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
 .openclaw-title {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.openclaw-page-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--oc-text-muted);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
 }
 
 .openclaw-title-icon {
@@ -249,6 +270,31 @@
   padding: 14px;
   background: linear-gradient(180deg, transparent 0%, var(--oc-canvas) 100%);
   border-top: 1px solid var(--oc-border);
+}
+
+.openclaw-context-select {
+  flex-shrink: 0;
+  max-width: 5.5rem;
+  height: 42px;
+  padding: 0 8px;
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-input);
+  background: var(--oc-surface);
+  color: var(--oc-text);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+.openclaw-context-select:focus-visible {
+  border-color: var(--oc-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--oc-primary) 16%, transparent);
+}
+
+.openclaw-context-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 #openclaw-input {

@@ -14,6 +14,11 @@ import {
   LinkIcon,
   SendIcon,
 } from '@src/components/OpenClawIcons';
+import {
+  composeUserMessageWithContext,
+  type ContextMode,
+} from '@src/lib/openclaw/composeUserMessageWithContext';
+import { extractPageInPage } from '@src/lib/openclaw/extractPageInPage';
 import { tString, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
 import { parseOpenclawMarkdown } from '@src/lib/openclaw/markdown';
 
@@ -48,6 +53,11 @@ export default function OpenClawAssistant() {
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const didInitWelcome = useRef(false);
+  const [headerTitle, setHeaderTitle] = useState(() =>
+    typeof document !== 'undefined' ? document.title : '',
+  );
+  const [selectionText, setSelectionText] = useState('');
+  const [contextMode, setContextMode] = useState<ContextMode>('article');
 
   const gatewayRef = useRef(DEFAULT_GATEWAY);
   const isDraggingRef = useRef(false);
@@ -123,6 +133,33 @@ export default function OpenClawAssistant() {
     messagesEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
 
+  useEffect(() => {
+    if (!dialogOpen) return;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const onSel = () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        debounce = null;
+        const sel = window.getSelection()?.toString().trim() ?? '';
+        setSelectionText(sel);
+        if (sel) setContextMode('selection');
+        else setContextMode((m) => (m === 'selection' ? 'article' : m));
+      }, 220);
+    };
+    document.addEventListener('selectionchange', onSel);
+    return () => {
+      document.removeEventListener('selectionchange', onSel);
+      if (debounce) clearTimeout(debounce);
+    };
+  }, [dialogOpen]);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const onNav = () => setHeaderTitle(document.title);
+    window.addEventListener('popstate', onNav);
+    return () => window.removeEventListener('popstate', onNav);
+  }, [dialogOpen]);
+
   const positionDialog = useCallback(() => {
     const iconEl = iconContainerRef.current;
     if (!iconEl) return;
@@ -149,12 +186,20 @@ export default function OpenClawAssistant() {
     setDialogPos(next);
   }, []);
 
+  const syncTitleAndSelection = useCallback(() => {
+    setHeaderTitle(document.title);
+    const sel = window.getSelection()?.toString().trim() ?? '';
+    setSelectionText(sel);
+    setContextMode(sel ? 'selection' : 'article');
+  }, []);
+
   const openDialog = useCallback(() => {
     setHoverOpen(false);
     positionDialog();
+    syncTitleAndSelection();
     setDialogOpen(true);
     queueMicrotask(() => inputRef.current?.focus());
-  }, [positionDialog]);
+  }, [positionDialog, syncTitleAndSelection]);
 
   const closeDialog = useCallback(() => {
     setDialogOpen(false);
@@ -170,6 +215,21 @@ export default function OpenClawAssistant() {
       const text = raw.trim();
       if (!text || isStreaming) return;
 
+      const extract = extractPageInPage();
+      const liveSel = window.getSelection()?.toString().trim() ?? '';
+      const { text: apiText } = composeUserMessageWithContext(
+        text,
+        contextMode,
+        {
+          title: extract.title,
+          url: extract.url,
+          articleText: extract.articleText,
+          fullText: extract.fullText,
+          selectionText: liveSel || selectionText,
+        },
+        locale,
+      );
+
       const requestId = crypto.randomUUID();
       setMessages((prev) => [
         ...prev,
@@ -182,7 +242,7 @@ export default function OpenClawAssistant() {
       chrome.runtime.sendMessage(
         {
           action: 'sendMessage',
-          text,
+          text: apiText,
           requestId,
           context: { url: window.location.href, title: document.title },
         },
@@ -226,7 +286,7 @@ export default function OpenClawAssistant() {
         },
       );
     },
-    [isStreaming],
+    [contextMode, isStreaming, locale, selectionText],
   );
 
   const sendMessage = useCallback(() => {
@@ -339,6 +399,10 @@ export default function OpenClawAssistant() {
         return;
       }
       if (request.action !== 'injectText') return;
+      setHeaderTitle(document.title);
+      const sel = window.getSelection()?.toString().trim() ?? '';
+      setSelectionText(sel);
+      setContextMode(sel ? 'selection' : 'article');
       setDialogOpen(true);
       setInputValue(request.text ?? '');
       queueMicrotask(() => {
@@ -498,9 +562,14 @@ export default function OpenClawAssistant() {
         }}
       >
         <div className="openclaw-header">
-          <span className="openclaw-title">
-            {t('assistantName')}
-          </span>
+          <div className="openclaw-header-main">
+            <span className="openclaw-title">{t('assistantName')}</span>
+            {headerTitle ? (
+              <span className="openclaw-page-title" title={window.location.href}>
+                {headerTitle}
+              </span>
+            ) : null}
+          </div>
           <div className="openclaw-controls">
             <button
               type="button"
@@ -551,6 +620,20 @@ export default function OpenClawAssistant() {
           <div ref={messagesEndRef} />
         </div>
         <div className="openclaw-input-area">
+          <select
+            className="openclaw-context-select"
+            value={contextMode}
+            onChange={(e) => setContextMode(e.target.value as ContextMode)}
+            disabled={isStreaming}
+            aria-label={t('contextType')}
+            title={t('contextType')}
+          >
+            <option value="article">{t('contextArticle')}</option>
+            <option value="full">{t('contextFullPage')}</option>
+            {selectionText.trim() ? (
+              <option value="selection">{t('contextSelection')}</option>
+            ) : null}
+          </select>
           <textarea
             id="openclaw-input"
             ref={inputRef}

@@ -11,6 +11,17 @@ import {
   SettingsIcon,
 } from '@src/components/OpenClawIcons';
 import { tString, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
+import {
+  composeUserMessageWithContext,
+  type ContextMode,
+} from '@src/lib/openclaw/composeUserMessageWithContext';
+import {
+  OPENCLAW_ACTIVE_TAB_CONTEXT,
+  OPENCLAW_REQUEST_ACTIVE_TAB_CONTEXT,
+  OPENCLAW_SELECTION_SYNC,
+  type ActiveTabContextMessage,
+  type SelectionSyncMessage,
+} from '@src/lib/openclaw/pageContextMessages';
 import { parseOpenclawMarkdown } from '@src/lib/openclaw/markdown';
 import '@pages/panel/openclaw-panel.css';
 
@@ -77,9 +88,26 @@ export default function Panel() {
   const [isStreaming, setIsStreaming] = useState(false);
   const didInitWelcome = useRef(false);
 
+  const [pageContext, setPageContext] = useState<{
+    title: string;
+    url: string;
+    articleText: string;
+    fullText: string;
+    error?: string;
+  }>({ title: '', url: '', articleText: '', fullText: '' });
+  const [activeTabId, setActiveTabId] = useState<number | null>(null);
+  const activeTabIdRef = useRef<number | null>(null);
+  const [selectionText, setSelectionText] = useState('');
+  const [contextMode, setContextMode] = useState<ContextMode>('article');
+
   const gatewayRef = useRef(DEFAULT_GATEWAY);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const windowIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
 
   const t = useCallback((key: string) => tString(locale, key), [locale]);
 
@@ -113,6 +141,79 @@ export default function Panel() {
     });
     loadPromptsFromStorage();
   }, [loadPromptsFromStorage]);
+
+  useEffect(() => {
+    chrome.windows.getCurrent((w) => {
+      windowIdRef.current = w.id ?? null;
+      void chrome.runtime.sendMessage({
+        action: OPENCLAW_REQUEST_ACTIVE_TAB_CONTEXT,
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    const onCtx = (request: unknown) => {
+      const r = request as { action?: string };
+      if (
+        r?.action !== OPENCLAW_ACTIVE_TAB_CONTEXT &&
+        r?.action !== OPENCLAW_SELECTION_SYNC
+      ) {
+        return;
+      }
+      if (r?.action === OPENCLAW_ACTIVE_TAB_CONTEXT) {
+        const m = request as ActiveTabContextMessage;
+        if (windowIdRef.current === null) windowIdRef.current = m.windowId;
+        else if (m.windowId !== windowIdRef.current) return;
+
+        const prevTabId = activeTabIdRef.current;
+        const tabChanged = prevTabId !== null && prevTabId !== m.tabId;
+        activeTabIdRef.current = m.tabId;
+        setActiveTabId(m.tabId);
+        setPageContext({
+          title: m.title,
+          url: m.url,
+          articleText: m.articleText,
+          fullText: m.fullText,
+          error: m.error,
+        });
+        if (tabChanged) {
+          setSelectionText('');
+          setContextMode('article');
+        }
+        return;
+      }
+      if (r?.action === OPENCLAW_SELECTION_SYNC) {
+        const m = request as SelectionSyncMessage;
+        if (
+          windowIdRef.current !== null &&
+          m.windowId !== windowIdRef.current
+        ) {
+          return;
+        }
+
+        const applySelection = (raw: string) => {
+          const text = raw.trim();
+          setSelectionText(text);
+          if (text) setContextMode('selection');
+          else setContextMode((mode) => (mode === 'selection' ? 'article' : mode));
+        };
+
+        void chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (chrome.runtime.lastError) return;
+          const activeId = tabs[0]?.id;
+          if (activeId !== m.tabId) return;
+          if (windowIdRef.current === null) windowIdRef.current = m.windowId;
+          if (activeTabIdRef.current !== m.tabId) {
+            activeTabIdRef.current = m.tabId;
+            setActiveTabId(m.tabId);
+          }
+          applySelection(m.text);
+        });
+      }
+    };
+    chrome.runtime.onMessage.addListener(onCtx);
+    return () => chrome.runtime.onMessage.removeListener(onCtx);
+  }, []);
 
   useEffect(() => {
     loadFromStorage();
@@ -171,6 +272,20 @@ export default function Panel() {
       const tab = await getActiveTab();
       const tabId = tab?.id;
       const requestId = crypto.randomUUID();
+
+      const { text: apiText } = composeUserMessageWithContext(
+        text,
+        contextMode,
+        {
+          title: pageContext.title,
+          url: pageContext.url,
+          articleText: pageContext.articleText,
+          fullText: pageContext.fullText,
+          selectionText,
+        },
+        locale,
+      );
+
       setMessages((prev) => [
         ...prev,
         { role: 'user', text },
@@ -182,7 +297,7 @@ export default function Panel() {
       chrome.runtime.sendMessage(
         {
           action: 'sendMessage',
-          text,
+          text: apiText,
           requestId,
           tabId,
           context: { url: tab?.url ?? '', title: tab?.title ?? '' },
@@ -227,7 +342,7 @@ export default function Panel() {
         },
       );
     },
-    [isStreaming],
+    [contextMode, isStreaming, locale, pageContext, selectionText],
   );
 
   sendWithTextRef.current = sendWithText;
@@ -273,7 +388,15 @@ export default function Panel() {
       requestId?: string;
       delta?: string;
       error?: string;
+      windowId?: number;
+      tabId?: number;
     }) => {
+      if (
+        request.action === OPENCLAW_ACTIVE_TAB_CONTEXT ||
+        request.action === OPENCLAW_SELECTION_SYNC
+      ) {
+        return;
+      }
       if (
         request.action === 'streamDelta' &&
         request.requestId &&
@@ -353,9 +476,21 @@ export default function Panel() {
   return (
     <div className="openclaw-panel-root">
       <div className="openclaw-panel-header">
-        <span className="openclaw-title">
-          {t('assistantName')}
-        </span>
+        <div className="openclaw-panel-header-main">
+          <span className="openclaw-title">{t('assistantName')}</span>
+          {pageContext.title ? (
+            <span
+              className="openclaw-page-title"
+              title={pageContext.url || undefined}
+            >
+              {pageContext.title}
+            </span>
+          ) : pageContext.error ? (
+            <span className="openclaw-page-title openclaw-page-title-muted">
+              {t('pageUnreadable')}
+            </span>
+          ) : null}
+        </div>
         <div className="openclaw-panel-controls">
           <button
             type="button"
@@ -410,6 +545,20 @@ export default function Panel() {
           <div ref={messagesEndRef} />
         </div>
         <div className="openclaw-input-area">
+          <select
+            className="openclaw-context-select"
+            value={contextMode}
+            onChange={(e) => setContextMode(e.target.value as ContextMode)}
+            disabled={isStreaming}
+            aria-label={t('contextType')}
+            title={t('contextType')}
+          >
+            <option value="article">{t('contextArticle')}</option>
+            <option value="full">{t('contextFullPage')}</option>
+            {selectionText.trim() ? (
+              <option value="selection">{t('contextSelection')}</option>
+            ) : null}
+          </select>
           <textarea
             id="openclaw-input"
             ref={inputRef}

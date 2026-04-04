@@ -9,8 +9,116 @@ import {
   prepareChatCompletionPost,
 } from '@src/lib/openclaw/gateway';
 import { tString, type OpenClawLocale } from '@src/lib/openclaw/i18nData';
+import {
+  OPENCLAW_ACTIVE_TAB_CONTEXT,
+  OPENCLAW_GET_PAGE_EXTRACT,
+  OPENCLAW_REQUEST_ACTIVE_TAB_CONTEXT,
+  OPENCLAW_SELECTION_CHANGED,
+  OPENCLAW_SELECTION_SYNC,
+} from '@src/lib/openclaw/pageContextMessages';
 
 const MENU_ROOT = 'openclaw-root';
+
+async function pushContextToExtension(msg: object): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage(msg);
+  } catch {
+    /* no panel or popup listening */
+  }
+}
+
+async function broadcastPageContextForTab(tabId: number): Promise<void> {
+  let tab: chrome.tabs.Tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch {
+    return;
+  }
+  const windowId = tab.windowId;
+  if (windowId === undefined) return;
+
+  const fallback = () => ({
+    title: tab.title ?? '',
+    url: tab.url ?? '',
+    articleText: '',
+    fullText: '',
+    error: 'no_content_script' as const,
+  });
+
+  try {
+    const res = (await chrome.tabs.sendMessage(tabId, {
+      action: OPENCLAW_GET_PAGE_EXTRACT,
+    })) as
+      | {
+          ok: true;
+          title: string;
+          url: string;
+          articleText: string;
+          fullText: string;
+        }
+      | { ok: false; error?: string }
+      | undefined;
+
+    if (res?.ok) {
+      await pushContextToExtension({
+        action: OPENCLAW_ACTIVE_TAB_CONTEXT,
+        windowId,
+        tabId,
+        title: res.title,
+        url: res.url,
+        articleText: res.articleText,
+        fullText: res.fullText,
+      });
+      return;
+    }
+
+    const base = fallback();
+    base.error =
+      res?.ok === false ? (res.error ?? 'extract_failed') : 'no_response';
+    await pushContextToExtension({
+      action: OPENCLAW_ACTIVE_TAB_CONTEXT,
+      windowId,
+      tabId,
+      ...base,
+    });
+  } catch {
+    await pushContextToExtension({
+      action: OPENCLAW_ACTIVE_TAB_CONTEXT,
+      windowId,
+      tabId,
+      ...fallback(),
+    });
+  }
+}
+
+let activeTabContextListenersRegistered = false;
+
+function initActiveTabContextListeners(): void {
+  if (!supportsSidePanel() || activeTabContextListenersRegistered) return;
+  activeTabContextListenersRegistered = true;
+
+  chrome.tabs.onActivated.addListener((activeInfo) => {
+    void broadcastPageContextForTab(activeInfo.tabId);
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.status !== 'complete') return;
+    void (async () => {
+      try {
+        const t = await chrome.tabs.get(tabId);
+        const [active] = await chrome.tabs.query({
+          active: true,
+          windowId: t.windowId,
+        });
+        if (active?.id === tabId) {
+          await broadcastPageContextForTab(tabId);
+        }
+      } catch {
+        /* tab gone */
+      }
+    })();
+  });
+}
 
 function supportsSidePanel(): boolean {
   return typeof chrome.sidePanel?.setPanelBehavior === 'function';
@@ -78,6 +186,8 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.runtime.onStartup?.addListener(() => {
   initSidePanelClickOpensPanel();
 });
+
+initActiveTabContextListeners();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
@@ -171,6 +281,42 @@ async function pushStreamEvent(
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request?.action === OPENCLAW_SELECTION_CHANGED) {
+    const tabId = sender.tab?.id;
+    if (tabId === undefined) return;
+    void chrome.tabs.get(tabId).then(
+      (tab) => {
+        void pushContextToExtension({
+          action: OPENCLAW_SELECTION_SYNC,
+          windowId: tab.windowId,
+          tabId,
+          text: String(request.text ?? ''),
+        });
+      },
+      () => {
+        /* tab closed */
+      },
+    );
+    return;
+  }
+
+  if (request?.action === OPENCLAW_REQUEST_ACTIVE_TAB_CONTEXT) {
+    void (async () => {
+      try {
+        const [active] = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        if (active?.id !== undefined) {
+          await broadcastPageContextForTab(active.id);
+        }
+      } finally {
+        sendResponse({ ok: true });
+      }
+    })();
+    return true;
+  }
+
   if (request?.action === 'openOptions') {
     void chrome.runtime.openOptionsPage();
     return;
