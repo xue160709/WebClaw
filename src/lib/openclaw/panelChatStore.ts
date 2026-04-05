@@ -8,13 +8,19 @@ export const PANEL_SESSION_KEY_PREFIX = 'ocw';
 
 export type PanelStoredMsg = { role: 'user' | 'assistant'; text: string };
 
+export type PanelChatContextState = {
+  pageArticle?: string;
+  articleInjected?: boolean;
+  fullInjected?: boolean;
+};
+
 export type PanelChatRecord = {
   urlKey: string;
   threadId: string;
   sessionKey: string;
   messages: PanelStoredMsg[];
   updatedAt: number;
-};
+} & PanelChatContextState;
 
 export function normalizePageUrlForChat(raw: string): string {
   const t = raw.trim();

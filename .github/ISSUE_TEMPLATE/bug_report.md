@@ -30,4 +30,4 @@ If applicable, add screenshots to help explain your problem.
 
 **Desktop (please complete the following information):**
  - OS: [e.g. Windows, Linux, MacOS] including version
- - Browser [e.g. chrome, firefox] including version
+ - Browser [Chrome] including version

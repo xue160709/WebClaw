@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "OpenClaw Web Assistant",
-  "description": "OpenClaw assistant while browsing — side panel chat, quick prompts, and context menu actions. / 浏览网页时在侧栏与 OpenClaw 代理沟通。",
+  "name": "WebClaw",
+  "description": "WebClaw — side panel chat, quick prompts, and context menu actions while browsing. / 浏览网页时侧栏对话、快捷提示与右键菜单。",
   "permissions": ["storage", "contextMenus", "activeTab", "sidePanel", "scripting", "tabs"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
@@ -16,7 +16,7 @@
     "open_in_tab": true
   },
   "action": {
-    "default_title": "OpenClaw Web Assistant",
+    "default_title": "WebClaw",
     "default_icon": {
       "32": "icon-32.png"
     }

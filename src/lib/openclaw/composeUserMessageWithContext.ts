@@ -20,9 +20,33 @@ function contextLabel(locale: OpenClawLocale, mode: ContextMode): string {
 }
 
 function pickBody(snapshot: PageContextForCompose, mode: ContextMode): string {
-  if (mode === 'selection') return snapshot.selectionText.trim();
+  if (mode === 'selection') return '';
   if (mode === 'full') return snapshot.fullText.trim();
   return snapshot.articleText.trim();
+}
+
+function buildSelectionModeBody(
+  snapshot: PageContextForCompose,
+  locale: OpenClawLocale,
+): { body: string; truncated: boolean } {
+  const sel = snapshot.selectionText.trim();
+  if (!sel) {
+    return { body: '', truncated: false };
+  }
+
+  const hLabel = tString(locale, 'contextSelectionHighlight');
+  const truncSuffix = '\n…' + tString(locale, 'contextTruncated');
+  const prefix = `${hLabel}: `;
+  const max = OPENCLAW_MAX_CONTEXT_CHARS;
+  let body = prefix + sel;
+
+  if (body.length <= max) {
+    return { body, truncated: false };
+  }
+
+  const budget = Math.max(0, max - prefix.length - truncSuffix.length);
+  body = prefix + sel.slice(0, budget) + truncSuffix;
+  return { body, truncated: true };
 }
 
 /**
@@ -36,25 +60,37 @@ export function composeUserMessageWithContext(
   locale: OpenClawLocale,
 ): { text: string; truncated: boolean } {
   const trimmedUser = userText.trim();
-  const body = pickBody(snapshot, mode);
-  const label = contextLabel(locale, mode);
 
-  if (!body) {
-    return { text: trimmedUser, truncated: false };
-  }
+  let body: string;
+  let truncated: boolean;
+  let label: string;
 
-  let truncated = false;
-  let useBody = body;
-  if (useBody.length > OPENCLAW_MAX_CONTEXT_CHARS) {
-    useBody =
-      useBody.slice(0, OPENCLAW_MAX_CONTEXT_CHARS) +
-      '\n…' +
-      tString(locale, 'contextTruncated');
-    truncated = true;
+  if (mode === 'selection') {
+    const built = buildSelectionModeBody(snapshot, locale);
+    body = built.body;
+    truncated = built.truncated;
+    label = contextLabel(locale, mode);
+    if (!body) {
+      return { text: trimmedUser, truncated: false };
+    }
+  } else {
+    label = contextLabel(locale, mode);
+    body = pickBody(snapshot, mode);
+    if (!body) {
+      return { text: trimmedUser, truncated: false };
+    }
+    truncated = false;
+    if (body.length > OPENCLAW_MAX_CONTEXT_CHARS) {
+      body =
+        body.slice(0, OPENCLAW_MAX_CONTEXT_CHARS) +
+        '\n…' +
+        tString(locale, 'contextTruncated');
+      truncated = true;
+    }
   }
 
   const header = tString(locale, 'contextBlockHeader');
-  const block = `${header}\n${tString(locale, 'contextPageTitle')}: ${snapshot.title}\n${tString(locale, 'contextPageUrl')}: ${snapshot.url}\n${tString(locale, 'contextType')}: ${label}\n\n${useBody}\n---`;
+  const block = `${header}\n${tString(locale, 'contextPageTitle')}: ${snapshot.title}\n${tString(locale, 'contextPageUrl')}: ${snapshot.url}\n${tString(locale, 'contextType')}: ${label}\n\n${body}\n---`;
 
   return { text: `${trimmedUser}\n\n${block}`, truncated };
 }

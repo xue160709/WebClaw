@@ -105,7 +105,7 @@ async function broadcastPageContextForTab(tabId: number): Promise<void> {
 let activeTabContextListenersRegistered = false;
 
 function initActiveTabContextListeners(): void {
-  if (!supportsSidePanel() || activeTabContextListenersRegistered) return;
+  if (activeTabContextListenersRegistered) return;
   activeTabContextListenersRegistered = true;
 
   chrome.tabs.onActivated.addListener((activeInfo) => {
@@ -129,10 +129,6 @@ function initActiveTabContextListeners(): void {
       }
     })();
   });
-}
-
-function supportsSidePanel(): boolean {
-  return typeof chrome.sidePanel?.setPanelBehavior === 'function';
 }
 
 async function getMenuLocale(): Promise<OpenClawLocale> {
@@ -183,7 +179,6 @@ async function updateContextMenu() {
 }
 
 function initSidePanelClickOpensPanel() {
-  if (!supportsSidePanel()) return;
   void chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((e) => console.error('sidePanel.setPanelBehavior:', e));
@@ -246,48 +241,27 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
       finalPrompt = finalPrompt.replace(/{imageUrl}/g, '');
 
-      if (supportsSidePanel() && tab.windowId !== undefined) {
-        await chrome.storage.local.set({
-          [STORAGE.PENDING_PANEL_INJECT]: {
-            text: finalPrompt,
-            autoSend: true,
-            ts: Date.now(),
-          },
-        });
-        try {
-          await chrome.sidePanel.open({ windowId: tab.windowId });
-        } catch (e) {
-          console.error('sidePanel.open:', e);
-        }
-        return;
-      }
-
-      void chrome.tabs.sendMessage(tab.id!, {
-        action: 'injectText',
-        text: finalPrompt,
-        autoSend: true,
+      await chrome.storage.local.set({
+        [STORAGE.PENDING_PANEL_INJECT]: {
+          text: finalPrompt,
+          autoSend: true,
+          ts: Date.now(),
+        },
       });
+      if (tab.windowId === undefined) return;
+      try {
+        await chrome.sidePanel.open({ windowId: tab.windowId });
+      } catch (e) {
+        console.error('sidePanel.open:', e);
+      }
     });
 });
 
-async function pushStreamEvent(
-  tabId: number | undefined,
-  msg: object,
-): Promise<void> {
-  if (supportsSidePanel()) {
-    try {
-      await chrome.runtime.sendMessage(msg);
-    } catch {
-      /* no extension page listening */
-    }
-    return;
-  }
-  if (tabId !== undefined) {
-    try {
-      await chrome.tabs.sendMessage(tabId, msg);
-    } catch {
-      /* tab closed or no content script */
-    }
+async function pushStreamEvent(msg: object): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage(msg);
+  } catch {
+    /* no panel or extension page listening */
   }
 }
 
@@ -404,8 +378,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   if (request?.action === 'sendMessage') {
     const text = String(request.text ?? '');
-    const tabId =
-      typeof request.tabId === 'number' ? request.tabId : sender.tab?.id;
 
     void (async () => {
       const sessionKey =
@@ -418,6 +390,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return;
       }
 
+      console.log(
+        '[OpenClaw] LLM request JSON:',
+        JSON.stringify(prep.body, null, 2),
+      );
+
       const requestId =
         typeof request.requestId === 'string' && request.requestId
           ? request.requestId
@@ -427,20 +404,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       try {
         for await (const delta of consumeChatCompletionStream(prep)) {
-          await pushStreamEvent(tabId, {
+          await pushStreamEvent({
             action: 'streamDelta',
             requestId,
             delta,
           });
         }
-        await pushStreamEvent(tabId, {
+        await pushStreamEvent({
           action: 'streamComplete',
           requestId,
         });
       } catch (error: unknown) {
         console.error('Stream API Error:', error);
         const message = error instanceof Error ? error.message : 'Unknown error';
-        await pushStreamEvent(tabId, {
+        await pushStreamEvent({
           action: 'streamError',
           requestId,
           error: message,

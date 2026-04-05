@@ -32,6 +32,7 @@ import {
   normalizePageUrlForChat,
   panelMessagesToStored,
   putPanelChatRecord,
+  type PanelChatContextState,
 } from '@src/lib/openclaw/panelChatStore';
 import '@pages/panel/openclaw-panel.css';
 
@@ -85,6 +86,17 @@ function applyPendingInject(
   });
 }
 
+function normalizePanelContextState(
+  state?: PanelChatContextState,
+): PanelChatContextState {
+  const pageArticle = state?.pageArticle?.trim();
+  return {
+    pageArticle: pageArticle || undefined,
+    articleInjected: state?.articleInjected === true,
+    fullInjected: state?.fullInjected === true,
+  };
+}
+
 export default function Panel() {
   const [locale, setLocale] = useState<OpenClawLocale>('zh-CN');
   const [pagePrompts, setPagePrompts] = useState<PromptItem[]>(
@@ -128,11 +140,15 @@ export default function Panel() {
 
   const urlLoadGenRef = useRef(0);
   const panelChatSessionRef = useRef({ threadId: '', sessionKey: '' });
+  const panelContextStateRef = useRef<PanelChatContextState>({});
   const streamUrlKeyRef = useRef('');
   const streamPersistRef = useRef({
     urlKey: '',
     threadId: '',
     sessionKey: '',
+    pageArticle: undefined as string | undefined,
+    articleInjected: false,
+    fullInjected: false,
   });
 
   useEffect(() => {
@@ -142,12 +158,22 @@ export default function Panel() {
   const t = useCallback((key: string) => tString(locale, key), [locale]);
 
   const persistPanelSnapshotForStream = useCallback((msgs: Msg[]) => {
-    const { urlKey, threadId, sessionKey } = streamPersistRef.current;
+    const {
+      urlKey,
+      threadId,
+      sessionKey,
+      pageArticle,
+      articleInjected,
+      fullInjected,
+    } = streamPersistRef.current;
     if (!urlKey || !threadId || !sessionKey) return;
     void putPanelChatRecord({
       urlKey,
       threadId,
       sessionKey,
+      pageArticle,
+      articleInjected,
+      fullInjected,
       messages: panelMessagesToStored(msgs),
       updatedAt: Date.now(),
     });
@@ -189,6 +215,7 @@ export default function Panel() {
         if (gen !== urlLoadGenRef.current) return;
         const welcomeText = tString(localeRef.current, 'defaultWelcome');
         if (rec) {
+          panelContextStateRef.current = normalizePanelContextState(rec);
           const sessionKey = await buildPanelSessionKey(urlKey, rec.threadId);
           panelChatSessionRef.current = { threadId: rec.threadId, sessionKey };
           setMessages(rec.messages as Msg[]);
@@ -200,6 +227,7 @@ export default function Panel() {
             });
           }
         } else {
+          panelContextStateRef.current = {};
           const threadId = newPanelThreadId();
           const sessionKey = await buildPanelSessionKey(urlKey, threadId);
           panelChatSessionRef.current = { threadId, sessionKey };
@@ -219,6 +247,7 @@ export default function Panel() {
         if (gen !== urlLoadGenRef.current) return;
         const welcomeText = tString(localeRef.current, 'defaultWelcome');
         try {
+          panelContextStateRef.current = {};
           const threadId = newPanelThreadId();
           const sessionKey = await buildPanelSessionKey(urlKey, threadId);
           panelChatSessionRef.current = { threadId, sessionKey };
@@ -232,6 +261,7 @@ export default function Panel() {
             updatedAt: Date.now(),
           });
         } catch {
+          panelContextStateRef.current = {};
           panelChatSessionRef.current = { threadId: '', sessionKey: '' };
           setMessages([{ role: 'assistant', text: welcomeText }]);
         }
@@ -368,6 +398,7 @@ export default function Panel() {
             urlKey,
             threadId,
             sessionKey,
+            ...panelContextStateRef.current,
             messages: panelMessagesToStored(next),
             updatedAt: Date.now(),
           });
@@ -425,6 +456,7 @@ export default function Panel() {
     }
     const threadId = newPanelThreadId();
     const sessionKey = await buildPanelSessionKey(urlKey, threadId);
+    panelContextStateRef.current = {};
     panelChatSessionRef.current = { threadId, sessionKey };
     const welcome: Msg[] = [
       { role: 'assistant', text: tString(localeRef.current, 'defaultWelcome') },
@@ -435,6 +467,7 @@ export default function Panel() {
         urlKey,
         threadId,
         sessionKey,
+        ...panelContextStateRef.current,
         messages: panelMessagesToStored(welcome),
         updatedAt: Date.now(),
       });
@@ -457,28 +490,84 @@ export default function Panel() {
         urlKey: sendUrlKey,
         threadId: panelChatSessionRef.current.threadId,
         sessionKey: panelChatSessionRef.current.sessionKey,
+        pageArticle: panelContextStateRef.current.pageArticle,
+        articleInjected: panelContextStateRef.current.articleInjected === true,
+        fullInjected: panelContextStateRef.current.fullInjected === true,
       };
 
-      const { text: apiText } = composeUserMessageWithContext(
-        text,
-        contextMode,
-        {
-          title: pageContext.title,
-          url: pageContext.url,
-          articleText: pageContext.articleText,
-          fullText: pageContext.fullText,
-          selectionText,
-        },
-        locale,
-      );
+      const currentContextState = normalizePanelContextState(panelContextStateRef.current);
+      const nextContextState = normalizePanelContextState({
+        ...currentContextState,
+        pageArticle: currentContextState.pageArticle ?? pageContext.articleText,
+      });
+      const snapshot = {
+        title: pageContext.title,
+        url: pageContext.url,
+        articleText: nextContextState.pageArticle ?? '',
+        fullText: pageContext.fullText,
+        selectionText,
+      };
 
-      setMessages((prev) => [
-        ...prev,
+      let apiText = text;
+
+      if (contextMode === 'selection') {
+        apiText = composeUserMessageWithContext(
+          text,
+          'selection',
+          snapshot,
+          locale,
+        ).text;
+      } else if (contextMode === 'article') {
+        if (!nextContextState.articleInjected) {
+          const composed = composeUserMessageWithContext(
+            text,
+            'article',
+            snapshot,
+            locale,
+          );
+          apiText = composed.text;
+          if (composed.text !== text) {
+            nextContextState.articleInjected = true;
+          }
+        }
+      } else if (!nextContextState.fullInjected) {
+        const composed = composeUserMessageWithContext(text, 'full', snapshot, locale);
+        apiText = composed.text;
+        if (composed.text !== text) {
+          nextContextState.fullInjected = true;
+        }
+      }
+
+      panelContextStateRef.current = nextContextState;
+      streamPersistRef.current = {
+        ...streamPersistRef.current,
+        pageArticle: nextContextState.pageArticle,
+        articleInjected: nextContextState.articleInjected === true,
+        fullInjected: nextContextState.fullInjected === true,
+      };
+
+      const nextMessages: Msg[] = [
+        ...messages,
         { role: 'user', text },
         { role: 'assistant', text: '', streamId: requestId },
-      ]);
+      ];
+
+      setMessages(nextMessages);
       setInputValue('');
       setIsStreaming(true);
+
+      try {
+        await putPanelChatRecord({
+          urlKey: sendUrlKey,
+          threadId: panelChatSessionRef.current.threadId,
+          sessionKey: panelChatSessionRef.current.sessionKey,
+          ...nextContextState,
+          messages: panelMessagesToStored(nextMessages),
+          updatedAt: Date.now(),
+        });
+      } catch (e) {
+        console.error('OpenClaw panel chat pre-send save failed:', e);
+      }
 
       const sessionKey = panelChatSessionRef.current.sessionKey;
 
@@ -544,6 +633,7 @@ export default function Panel() {
       contextMode,
       isStreaming,
       locale,
+      messages,
       pageContext,
       panelChatReady,
       persistPanelSnapshotForStream,

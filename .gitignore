@@ -383,7 +383,6 @@ $RECYCLE.BIN/
 # build
 /dist
 /dist_chrome
-/dist_firefox
 
 # etc
 .idea
@@ -391,3 +390,4 @@ $RECYCLE.BIN/
 #generated manifest
 public/manifest.json
 /.cursor
+/dist_firefox

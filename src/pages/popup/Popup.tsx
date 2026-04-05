@@ -27,7 +27,7 @@ export default function Popup() {
         </div>
 
         <p className="text-sm leading-6 text-openclaw-muted">
-          灰底白卡片布局，主操作与强调态使用橙色，覆盖设置页、悬浮助手与侧边栏。
+          灰底白卡片布局，主操作与强调态使用橙色，覆盖设置页与侧边栏。
         </p>
 
         <div className="mt-4 grid gap-2">

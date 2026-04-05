@@ -1,7 +1,7 @@
 {
-  "name": "openclaw-web-assistant",
+  "name": "webclaw",
   "version": "0.26.0",
-  "description": "OpenClaw browser extension — Vite, React, TypeScript, Tailwind.",
+  "description": "WebClaw browser extension — Vite, React, TypeScript, Tailwind.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -10,10 +10,8 @@
   "scripts": {
     "build": "vite build --config vite.config.chrome.ts",
     "build:chrome": "vite build --config vite.config.chrome.ts",
-    "build:firefox": "vite build --config vite.config.firefox.ts",
     "dev": "nodemon --config nodemon.chrome.json",
-    "dev:chrome": "nodemon --config nodemon.chrome.json",
-    "dev:firefox": "nodemon --config nodemon.firefox.json"
+    "dev:chrome": "nodemon --config nodemon.chrome.json"
   },
   "type": "module",
   "dependencies": {
