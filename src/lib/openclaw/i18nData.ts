@@ -7,6 +7,8 @@ export const OPENCLAW_I18N: Record<
   en: {
     settingsTitle: 'OpenClaw Settings',
     tokenLabel: 'OpenClaw Token (Required)',
+    tokenShow: 'Show token',
+    tokenHide: 'Hide token',
     gatewayLabel: 'Gateway URL',
     sessionKeyLabel: 'Default Session Key',
     saveBtn: 'Save Settings',
@@ -47,6 +49,8 @@ export const OPENCLAW_I18N: Record<
   'zh-CN': {
     settingsTitle: '龙虾助理设置',
     tokenLabel: 'OpenClaw Token（必填）',
+    tokenShow: '显示 Token',
+    tokenHide: '隐藏 Token',
     gatewayLabel: 'Gateway URL',
     sessionKeyLabel: '默认 Session Key',
     saveBtn: '保存设置',

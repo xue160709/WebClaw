@@ -32,6 +32,14 @@
 
 ## 快速开始
 
+### 从 GitHub Release 安装（Chrome）
+
+1. 打开本仓库的 **[Releases](https://github.com/xue160709/WebClaw/releases)** 页面，下载最新发行版中的扩展压缩包（常见为 `.zip`）。
+2. 解压后，在「加载已解压的扩展程序」时选择**根目录下含有 `manifest.json` 的文件夹**（发行包一般为已构建好的 `dist_chrome` 目录结构）。
+3. 在 Chrome 中打开 `chrome://extensions`，开启「开发者模式」，点击「加载已解压的扩展程序」，选中该文件夹。
+
+若使用预构建包，可跳过下文 **§1～§3**，直接从 **OpenClaw 网关** 与 **4. 配置网关** 继续。
+
 ### 1. 安装依赖
 
 ```bash

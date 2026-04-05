@@ -32,6 +32,14 @@ The extension does **not** run the model itself. You need a compatible gateway (
 
 ## Quick start
 
+### Install from GitHub Release (Chrome)
+
+1. Open **[Releases](https://github.com/xue160709/WebClaw/releases)** and download the latest extension archive (for example a `.zip` from the release assets).
+2. Unzip it. In **Load unpacked**, pick the folder whose **root contains `manifest.json`** (release packages are usually the built `dist_chrome` layout).
+3. In Chrome, go to `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select that folder.
+
+If you use a prebuilt release, skip **§1–§3** below and continue with **OpenClaw gateway** and **Configure the gateway**.
+
 ### 1. Install dependencies
 
 ```bash

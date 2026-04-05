@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   DEFAULT_GATEWAY,
   DEFAULT_PROMPTS,
-  DEFAULT_SESSION,
+  // DEFAULT_SESSION,
   STORAGE,
   normalizeLocale,
   type PromptItem,
@@ -33,7 +33,8 @@ export default function Options() {
   const [locale, setLocale] = useState<OpenClawLocale>('zh-CN');
   const [gateway, setGateway] = useState(DEFAULT_GATEWAY);
   const [token, setToken] = useState('');
-  const [sessionKey, setSessionKey] = useState(DEFAULT_SESSION);
+  const [tokenVisible, setTokenVisible] = useState(false);
+  // const [sessionKey, setSessionKey] = useState(DEFAULT_SESSION);
   const [pagePrompts, setPagePrompts] = useState<PromptItem[]>(
     DEFAULT_PROMPTS.page,
   );
@@ -54,7 +55,7 @@ export default function Options() {
       [
         STORAGE.GATEWAY,
         STORAGE.TOKEN,
-        STORAGE.SESSION_KEY,
+        // STORAGE.SESSION_KEY,
         STORAGE.LANGUAGE,
         STORAGE.PAGE_PROMPTS,
         STORAGE.SELECTION_PROMPTS,
@@ -64,7 +65,7 @@ export default function Options() {
       (r) => {
         setGateway((r[STORAGE.GATEWAY] as string) || DEFAULT_GATEWAY);
         setToken((r[STORAGE.TOKEN] as string) || '');
-        setSessionKey((r[STORAGE.SESSION_KEY] as string) || DEFAULT_SESSION);
+        // setSessionKey((r[STORAGE.SESSION_KEY] as string) || DEFAULT_SESSION);
         setLocale(normalizeLocale(r[STORAGE.LANGUAGE] as string | undefined));
         setPagePrompts(
           migratePrompts(
@@ -98,7 +99,7 @@ export default function Options() {
     const settings: Record<string, unknown> = {
       [STORAGE.GATEWAY]: gateway.trim(),
       [STORAGE.TOKEN]: tok,
-      [STORAGE.SESSION_KEY]: sessionKey.trim(),
+      // [STORAGE.SESSION_KEY]: sessionKey.trim(),
       [STORAGE.LANGUAGE]: locale,
       [STORAGE.PAGE_PROMPTS]: pagePrompts.filter(
         (p) => p.label.trim() && p.prompt.trim(),
@@ -240,7 +241,7 @@ export default function Options() {
             </div>
             <div className="flex flex-wrap gap-3">
               <div className="rounded-openclaw-pill border border-openclaw-border bg-openclaw-soft px-4 py-2 text-sm text-openclaw-muted">
-                Gateway / Token / Session
+                Gateway / Token
               </div>
               <div className="rounded-openclaw-pill border border-openclaw-border bg-openclaw-soft px-4 py-2 text-sm text-openclaw-muted">
                 Prompt presets
@@ -286,15 +287,70 @@ export default function Options() {
               <label className={labelClass} htmlFor="tok">
                 {t('tokenLabel')}
               </label>
-              <input
-                id="tok"
-                type="text"
-                className={inputClass}
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  id="tok"
+                  type={tokenVisible ? 'text' : 'password'}
+                  autoComplete="off"
+                  className={`${inputClass} pr-12`}
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-openclaw-pill p-2 text-openclaw-muted transition hover:bg-openclaw-soft hover:text-openclaw-text focus:outline-none focus:ring-2 focus:ring-openclaw-primary/25"
+                  onClick={() => setTokenVisible((v) => !v)}
+                  aria-label={tokenVisible ? t('tokenHide') : t('tokenShow')}
+                  title={tokenVisible ? t('tokenHide') : t('tokenShow')}
+                >
+                  {tokenVisible ? (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      className="h-5 w-5"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.638 0 8.573 3.007 9.963 7.178.073.227.073.442 0 .615M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3 3l18 18"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      className="h-5 w-5"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
 
+            {/* 默认 Session Key — 暂时注释
             <div>
               <label className={labelClass} htmlFor="sess">
                 {t('sessionKeyLabel')}
@@ -307,8 +363,9 @@ export default function Options() {
                 onChange={(e) => setSessionKey(e.target.value)}
               />
             </div>
+            */}
 
-            <div>
+            <div className="md:col-span-2">
               <label className={labelClass} htmlFor="lang">
                 {t('languageLabel')}
               </label>
