@@ -58,6 +58,24 @@ yarn dev
 2. Enable **Developer mode**
 3. **Load unpacked** → select the **`dist_chrome`** folder (created after dev or build)
 
+### OpenClaw gateway: enable Chat Completions (HTTP)
+
+WebClaw uses the Gateway’s **OpenAI-compatible** `POST /v1/chat/completions` endpoint. That HTTP surface is **disabled by default**; enable it in your OpenClaw config file **`openclaw.json`** (merge or add the following, then restart the Gateway):
+
+```json5
+{
+  gateway: {
+    http: {
+      endpoints: {
+        chatCompletions: { enabled: true },
+      },
+    },
+  },
+}
+```
+
+For authentication, agent-first `model` routing, streaming (SSE), and the security boundary for this endpoint, see the official docs: [OpenAI Chat Completions (HTTP)](https://docs.openclaw.ai/gateway/openai-http-api).
+
 ### 4. Configure the gateway
 
 1. Open the popup from the toolbar or open **Options** from the extension menu.

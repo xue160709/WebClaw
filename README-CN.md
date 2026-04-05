@@ -58,6 +58,24 @@ yarn dev
 2. 开启「开发者模式」
 3. 「加载已解压的扩展程序」→ 选择项目下的 **`dist_chrome`**（开发或构建后生成）
 
+### OpenClaw 网关：开启 Chat Completions（HTTP）
+
+WebClaw 依赖 OpenClaw 网关提供的 **OpenAI 兼容** `POST /v1/chat/completions` 接口。该 HTTP 端点**默认关闭**，请在 OpenClaw 的配置文件 **`openclaw.json`** 中加入或合并以下配置，并**重启网关**后生效：
+
+```json5
+{
+  gateway: {
+    http: {
+      endpoints: {
+        chatCompletions: { enabled: true },
+      },
+    },
+  },
+}
+```
+
+鉴权方式、`model` 与 Agent 路由、流式（SSE）以及该接口的安全边界等，详见官方文档：[OpenAI Chat Completions（HTTP）](https://docs.openclaw.ai/gateway/openai-http-api)。
+
 ### 4. 配置网关
 
 1. 点击扩展图标打开 Popup，或使用选项页入口打开 **设置**。
