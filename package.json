@@ -16,7 +16,7 @@
   "type": "module",
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
-    "react": "^19.1.0",
+    "react": "^19.2.4",
     "react-dom": "^19.1.0",
     "turndown": "^7.2.4",
     "webextension-polyfill": "^0.12.0"
@@ -26,7 +26,7 @@
     "@tailwindcss/vite": "^4.1.11",
     "@types/chrome": "^0.1.11",
     "@types/node": "^24.9.1",
-    "@types/react": "^19.1.8",
+    "@types/react": "^19.2.14",
     "@types/react-dom": "^19.1.6",
     "@types/turndown": "^5.0.6",
     "@types/webextension-polyfill": "^0.12.3",
